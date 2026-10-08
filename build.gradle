@@ -1,0 +1,101 @@
+plugins {
+    id 'java-library'
+    id 'idea'
+    id 'net.neoforged.moddev' version '2.0.147'
+}
+
+tasks.named('wrapper', Wrapper).configure {
+    distributionType = Wrapper.DistributionType.BIN
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_archive_name
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(java_version as int)
+
+repositories {
+    mavenLocal()
+    // Thaumaturge itself is only published on CurseForge.
+    exclusiveContent {
+        forRepository { maven { url = 'https://cursemaven.com' } }
+        filter { includeGroup 'curse.maven' }
+    }
+    exclusiveContent {
+        forRepository { maven { url = 'https://api.modrinth.com/maven' } }
+        filter { includeGroup 'maven.modrinth' }
+    }
+    maven { url = 'https://maven.theillusivec4.top/' }
+}
+
+neoForge {
+    version = project.neo_version
+
+    runs {
+        client {
+            client()
+            gameDirectory = file('run')
+        }
+        // Makes a fresh creative world, opens the book in several research states, screenshots each
+        // into runs/book-check/screenshots, then quits. See BookVisualCheck.
+        bookVisualCheck {
+            client()
+            gameDirectory = file('runs/book-check')
+            programArguments.addAll '--width', '1600', '--height', '900'
+            systemProperty 'classic_thaumonomicon.visualCheck', 'true'
+        }
+        configureEach {
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            logLevel = org.slf4j.event.Level.INFO
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+dependencies {
+    // The addon is compiled against the released Thaumaturge jar and runs alongside it in dev.
+    implementation "curse.maven:thaumaturge-1628024:${thaumaturge_curse_file}"
+    // Thaumaturge's own required dependencies, needed only to launch the dev client.
+    runtimeOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}+${minecraft_version}"
+    runtimeOnly "maven.modrinth:XaDC71GB:${lithostitched_modrinth_version}"
+}
+
+var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    var replaceProperties = [
+            minecraft_version        : minecraft_version,
+            minecraft_version_range  : minecraft_version_range,
+            neo_version              : neo_version,
+            neo_version_range        : neo_version_range,
+            loader_version_range     : loader_version_range,
+            mod_id                   : mod_id,
+            mod_name                 : mod_name,
+            mod_license              : mod_license,
+            mod_version              : mod_version,
+            mod_authors              : mod_authors,
+            mod_description          : mod_description,
+            thaumaturge_version_range: thaumaturge_version_range,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from 'src/main/templates'
+    into 'build/generated/sources/modMetadata'
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// The screenshot harness is for development only. Nothing loads it unless the run sets its property.
+tasks.named('jar', Jar) {
+    exclude 'com/wenderxd/classicthaumonomicon/client/BookVisualCheck*'
+}

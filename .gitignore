@@ -1,0 +1,30 @@
+# gradle
+.gradle/
+build/
+
+# dev runs and visual-check screenshots
+run/
+runs/
+run-data/
+
+# idea
+.idea/
+out/
+*.iml
+*.ipr
+*.iws
+
+# eclipse
+bin/
+.settings/
+.metadata/
+.classpath
+.project
+*.launch
+
+# vscode
+.vscode/
+
+# python
+__pycache__/
+*.pyc
