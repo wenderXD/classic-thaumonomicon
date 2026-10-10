@@ -7,13 +7,13 @@ modId = "${mod_id}"
 version = "${mod_version}"
 displayName = "${mod_name}"
 logoFile = "logo.png"
-# Pixel art: shown sharp rather than smoothed.
+# Pixel art, so no smoothing.
 logoBlur = false
 authors = "${mod_authors}"
-credits = "Thaumaturge by Leclowndu93150 and its contributors; the icon carries Thaumaturge's Thaumonomicon and TT mark. Frame, plates and nebula redrawn for Thaumaturge's Legacy. Original Thaumcraft by Azanor."
+credits = "Thaumaturge by Leclowndu93150 and its contributors; the icon carries Thaumaturge's Thaumonomicon. Frame, plates and nebula redrawn for Thaumaturge's Legacy. Original Thaumcraft by Azanor."
 description = '''${mod_description}'''
 
-# Purely a client-side reskin: servers never need it, and a client with it can join one without it.
+# Client-side only. Servers don't need it, and a client with it can join a server without it.
 displayTest = "IGNORE_ALL_VERSION"
 
 [[dependencies."${mod_id}"]]

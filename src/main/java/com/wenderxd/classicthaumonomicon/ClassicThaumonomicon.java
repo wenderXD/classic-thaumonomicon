@@ -13,19 +13,16 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 
 /**
- * Gives Thaumaturge's Thaumonomicon its Thaumcraft 4 look back.
+ * Swaps Thaumaturge's research map for the Thaumcraft 4 style one.
  *
- * <h2>How it takes over</h2>
+ * <p>Thaumaturge opens its book from the item, the keybind and a server packet, and all three go
+ * through {@link ThaumonomiconBrowserScreen#reopen()}. Instead of patching each of them, this
+ * listens for a screen that is about to open and replaces it when it is Thaumaturge's research
+ * map. That also covers coming back from an entry's pages: {@code reopen()} can open straight onto
+ * the last-read entry with Thaumaturge's map behind it, and the map is swapped when that entry is
+ * closed.
  *
- * <p>Thaumaturge opens its book from three places - the item, the keybind and a server packet - and
- * every one of them goes through {@link ThaumonomiconBrowserScreen#reopen()}. Rather than patch any
- * of them, this listens for the moment a screen is about to open and, when it is Thaumaturge's
- * research map, hands Minecraft the classic one instead. The same hook catches the way back from an
- * entry's pages: {@code reopen()} can open straight onto the last-read entry with Thaumaturge's map
- * behind it, and when that entry is closed the map it returns to is swapped here too.
- *
- * <p>Everything past the map - the pages, recipes and stages - is still Thaumaturge's own screen.
- * Its open book is already the classic two-page spread on parchment, so it is left alone.
+ * <p>The pages, recipes and stages past the map are still Thaumaturge's own screen.
  */
 @Mod(value = ClassicThaumonomicon.MOD_ID, dist = Dist.CLIENT)
 public final class ClassicThaumonomicon {

@@ -12,8 +12,8 @@ public final class ClassicConfig {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
         ENABLED = builder.comment("Open the classic research map in place of Thaumaturge's own.").translation("classic_thaumonomicon.configuration.enabled").define("enabled", true);
         CLASSIC_BACKGROUNDS = builder
-                .comment("Show every Thaumaturge category over the one violet nebula, as Thaumcraft 4 did. Eldritch keeps its own sky either way, as it did in Thaumcraft 4,",
-                        "and categories added by other mods always use their own background. Off: every category uses the background Thaumaturge gives it.")
+                .comment("Use the same violet nebula behind every Thaumaturge category, like Thaumcraft 4. Eldritch keeps its own background either way,",
+                        "and categories added by other mods always use theirs. When off, every category uses the background Thaumaturge gives it.")
                 .translation("classic_thaumonomicon.configuration.classicBackgrounds").define("classicBackgrounds", true);
         SPEC = builder.build();
     }

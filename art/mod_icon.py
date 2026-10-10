@@ -1,17 +1,11 @@
-"""The addon's icon for the mod list (src/main/resources/logo.png).
+"""Draws the mod icon (src/main/resources/logo.png).
 
-A corner of the classic research map: the rune-carved wooden frame round the violet nebula, cut
-down to a square, with the Thaumonomicon lying on it as research does - lit from behind, tendrils
-reaching out of it, a new-research sparkle at its corner - and Thaumaturge's own "TT" mark pressed
-over the frame's corner like a seal, since this is Thaumaturge's book.
+The icon is the research map in miniature: the carved wooden frame, the violet nebula in its
+window, and the Thaumonomicon in the middle with a new-research sparkle at its corner.
 
-Drawn on a 128-pixel grid and scaled five times with no smoothing, so it lands at 640 px like
-Thaumaturge's own logo and stays crisp.
-
-Inputs:
-  the frame, nebula and sparkle   this addon's textures (redrawn Thaumaturge's Legacy art)
-  the book                        Thaumaturge's Thaumonomicon item, from the Thaumaturge jar
-  the TT mark                     logo.png, from the Thaumaturge jar
+The frame, nebula and sparkle come from the pixel maps below, on a 64 px grid. The result is scaled
+10x with no smoothing, which is the pixel size of Thaumaturge's own logo. The book is Thaumaturge's
+Thaumonomicon item, read from the Thaumaturge jar and pasted in the middle at twice its size.
 
 Run:  python art/mod_icon.py [--out PATH]
 """
@@ -22,17 +16,107 @@ import io
 import os
 import zipfile
 
-import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-GUI = os.path.join(ROOT, "src", "main", "resources", "assets", "classic_thaumonomicon", "textures", "gui")
 THAUMATURGE_JAR = os.path.expanduser("~/.gradle/caches/modules-2/files-2.1/curse.maven/thaumaturge-1628024/*/*/thaumaturge-1628024-*.jar")
 
-GRID = 128
-SCALE = 5
-BORDER = 16
+GRID = 64
+SCALE = 10
+BORDER = 9
+WINDOW = GRID - 2 * BORDER
+
+COLOURS = {
+    # wood, dark to light
+    "0": "#170c09", "1": "#2b1a14", "2": "#44281c", "3": "#5b3927", "4": "#765036", "5": "#946b4a",
+    # nebula, deep to bright, then its blue cloud and its stars
+    "a": "#1f0d33", "c": "#35125a", "e": "#541b80", "f": "#7c26a3", "h": "#aa3bc0",
+    "x": "#33288a", "z": "#4d3fb5", "s": "#f4e4ff", "t": "#b891e6",
+    # brass
+    "g": "#ad6e0b", "G": "#d8a425", "y": "#f1c352",
+    # sparkle
+    "W": "#ffffff", "q": "#c9f4ff", "Q": "#7fd8f5",
+}
+
+# One horizontal board: edge line, highlight row, five rows of grain, shadow row, edge line.
+# The side posts are the same board transposed.
+BOARD = [
+    "0000000000000000000000000000000000000000000000",
+    "5555554555555555544555555555554555555555445555",
+    "3333334444433333333333333333333333334444433333",
+    "3222333333333333344444433333333333333333333223",
+    "3333333333333333333333333333444443333333333333",
+    "2222233333344444333333333333333333333333322222",
+    "3333333333333333333334444433333333333333333333",
+    "2222222222122222222222222221222222222222212222",
+    "0000000000000000000000000000000000000000000000",
+]
+
+# Corner block with a brass stud.
+CORNER = [
+    "000000000",
+    "055555540",
+    "054444320",
+    "0543y3320",
+    "054yGg320",
+    "0543g3320",
+    "053333220",
+    "042222220",
+    "000000000",
+]
+
+# Rune glyphs, 5 px tall.
+RUNES = {
+    "gate": ["#.#", "#.#", "###", "#.#", "#.#"],
+    "bolt": ["..#", ".#.", "###", ".#.", "#.."],
+    "eye": ["..#..", ".#.#.", "#.#.#", ".#.#.", "..#.."],
+    "peak": [".#.", "#.#", "#.#", "###", "#.#"],
+    "hook": ["###", "#..", "#.#", "#..", "###"],
+    "glass": ["###", "#.#", ".#.", "#.#", "###"],
+    "fork": ["#.#.#", "#.#.#", ".###.", "..#..", "..#.."],
+    "cup": ["#.#", "#.#", "#.#", "#.#", ".#."],
+    "key": [".#.", "#.#", ".#.", "###", ".#."],
+    "branch": ["#.#", "#.#", ".#.", ".#.", ".#."],
+}
+
+# Runes on each side, as two words like the in-game frame.
+TOP = (["gate", "bolt", "eye", "gate"], ["peak", "cup", "key"])
+BOTTOM = (["glass", "fork", "branch"], ["hook", "eye", "gate", "peak"])
+LEFT = (["peak", "hook"], ["bolt", "glass", "cup"])
+RIGHT = (["branch", "eye"], ["key", "gate", "fork"])
+
+# Nebula clouds as discs (x, y, radius) in window pixels. Each list sets what it covers to the
+# next brighter tone. DARK darkens the corners.
+CLOUDS = [
+    ("e", [(23, 22, 22), (6, 10, 7), (40, 36, 8), (38, 6, 6), (8, 40, 7)]),
+    ("f", [(23, 22, 18), (4, 22, 5), (8, 26, 4), (6, 17, 3), (41, 21, 5), (38, 27, 4), (43, 15, 3),
+           (33, 41, 4), (38, 39, 3), (28, 42, 3), (12, 3, 4), (17, 2, 3), (30, 3, 3)]),
+    ("h", [(23, 22, 16), (4, 22, 3), (7, 25, 3), (41, 21, 3), (39, 25, 3), (33, 42, 3), (36, 40, 2)]),
+]
+DARK = [(0, 45, 6), (45, 0, 5), (0, 0, 4), (45, 45, 5)]
+BLUE = [("x", [(6, 38, 5), (11, 41, 3), (3, 33, 3)]), ("z", [(5, 38, 3), (8, 40, 2)])]
+STARS = [
+    (3, 5, "s"), (41, 12, "s"), (4, 43, "t"), (43, 32, "s"), (21, 1, "t"), (29, 43, "s"),
+    (2, 14, "t"), (16, 43, "t"), (42, 43, "t"), (36, 2, "t"), (2, 29, "s"),
+]
+
+# Thaumaturge's 16 px book, drawn at 2x and centred in the window.
+BOOK = "assets/thaumaturge/textures/item/thaumonomicon.png"
+BOOK_AT = (16, 16)
+
+SPARKLE = [
+    "....Q....",
+    "....Q....",
+    "....q....",
+    "...qWq...",
+    "QQqWWWqQQ",
+    "...qWq...",
+    "....q....",
+    "....Q....",
+    "....Q....",
+]
+SPARKLE_AT = (17, 17)
 
 
 def thaumaturge_jar():
@@ -47,95 +131,91 @@ def from_jar(path):
         return Image.open(io.BytesIO(jar.read(path))).convert("RGBA")
 
 
-def frame():
-    """The book's pane shrunk to a square by cutting out its middle: the four corner blocks and
-    the ends of each board and post, runes and all, at the sheet's own pixel size."""
-    pane = np.array(Image.open(os.path.join(GUI, "book_frame.png")).convert("RGBA"))[:230, :256]
-    half = GRID // 2
-    cols = np.r_[0:half, 256 - half:256]
-    rows = np.r_[0:half, 230 - half:230]
-    return Image.fromarray(np.ascontiguousarray(pane[rows][:, cols]))
+def rgb(colour):
+    return tuple(int(colour[i:i + 2], 16) for i in (1, 3, 5))
 
 
-def nebula():
-    """The window's sky: the bright heart of the nebula, sampled at half size as the map does."""
-    sky = Image.open(os.path.join(GUI, "book_nebula.png")).convert("RGBA")
-    return sky.crop((160, 120, 160 + 2 * GRID, 120 + 2 * GRID)).resize((GRID, GRID), Image.BOX)
+def stamp(px, rows, x, y):
+    """Draws a pixel map with its top-left corner at (x, y). Dots are transparent."""
+    for dy, row in enumerate(rows):
+        for dx, c in enumerate(row):
+            if c != ".":
+                px[x + dx, y + dy] = rgb(COLOURS[c])
 
 
-def shadow(img, alpha=0.55):
-    a = np.array(img).astype(float)
-    a[..., :3] = 0
-    a[..., 3] *= alpha
-    return Image.fromarray(a.astype(np.uint8))
+def upright(rows):
+    """Transposes a board, so its highlight row becomes the left column."""
+    return ["".join(col) for col in zip(*rows)]
 
 
-def glow(cx, cy, radius, rgb, strength):
-    """A soft round light, for the book to float in front of."""
-    yy, xx = np.mgrid[0:GRID, 0:GRID].astype(float)
-    r = np.hypot(xx - cx, yy - cy) / radius
-    a = np.clip(1.0 - r, 0.0, 1.0) ** 1.8 * strength
-    out = np.zeros((GRID, GRID, 4))
-    out[..., :3] = rgb
-    out[..., 3] = a * 255.0
-    return Image.fromarray(out.astype(np.uint8))
+def carve(px, words, x, y, down):
+    """Draws two words of runes on a board, centred along its length."""
+    length = sum(5 if down else len(RUNES[name][0]) for word in words for name in word)
+    length += sum(len(word) - 1 for word in words) + 4
+    at = (WINDOW - length) // 2
+    for word in words:
+        for name in word:
+            rows = RUNES[name]
+            wide = len(rows[0])
+            gx, gy = (x + (5 - wide) // 2, y + at) if down else (x + at, y)
+            stamp(px, [row.replace("#", "1") for row in rows], gx, gy)
+            at += (5 if down else wide) + 1
+        at += 3
 
 
-def wave_line(canvas, x0, y0, x1, y1, rgb, phase):
-    """A waving tendril reaching out of the book, brightest where it leaves and fading away."""
-    px = canvas.load()
-    steps = int(np.hypot(x1 - x0, y1 - y0) * 3)
-    nx, ny = -(y1 - y0), x1 - x0
-    norm = max(1e-6, float(np.hypot(nx, ny)))
-    for i in range(steps + 1):
-        t = i / steps
-        off = 2.5 * np.sin(t * 7.0 + phase) * (1.0 - t) + 6.0 * t * (1 - t)
-        x = x0 + (x1 - x0) * t + nx / norm * off
-        y = y0 + (y1 - y0) * t + ny / norm * off
-        xi, yi = int(round(x)), int(round(y))
-        if 0 <= xi < GRID and 0 <= yi < GRID:
-            k = 0.85 * (1.0 - t) ** 0.8
-            r, g, b, _ = px[xi, yi]
-            px[xi, yi] = (int(r * (1 - k) + rgb[0] * k), int(g * (1 - k) + rgb[1] * k), int(b * (1 - k) + rgb[2] * k), 255)
+def frame(px):
+    far = GRID - BORDER
+    turned = [row[::-1] for row in BOARD]
+    stamp(px, BOARD, BORDER, 0)
+    stamp(px, turned, BORDER, far)
+    stamp(px, upright(BOARD), 0, BORDER)
+    stamp(px, upright(turned), far, BORDER)
+    for x in (0, far):
+        for y in (0, far):
+            stamp(px, CORNER, x, y)
+    carve(px, TOP, BORDER, 2, False)
+    carve(px, BOTTOM, BORDER, far + 2, False)
+    carve(px, LEFT, 2, BORDER, True)
+    carve(px, RIGHT, far + 2, BORDER, True)
+
+
+def sky(px):
+    """Draws the nebula in the window: flat clouds from dark to bright behind the book, a blue
+    cloud at the lower left, a few stars, and the frame's shadow along the top and left edges."""
+    def inside(discs, x, y):
+        return any((x - cx) ** 2 + (y - cy) ** 2 <= r * r for cx, cy, r in discs)
+
+    for y in range(WINDOW):
+        for x in range(WINDOW):
+            c = "c"
+            if inside(DARK, x, y):
+                c = "a"
+            for tone, discs in CLOUDS:
+                if inside(discs, x, y):
+                    c = tone
+            for tone, discs in BLUE:
+                if inside(discs, x, y) and c in "acexz":
+                    c = tone
+            if x == 0 or y == 0:
+                c = {"c": "a", "e": "c", "f": "e", "h": "f", "x": "a", "z": "x"}.get(c, c)
+            px[BORDER + x, BORDER + y] = rgb(COLOURS[c])
+    for x, y, tone in STARS:
+        px[BORDER + x, BORDER + y] = rgb(COLOURS[tone])
 
 
 def build():
-    canvas = Image.new("RGBA", (GRID, GRID), (0, 0, 0, 0))
-    canvas.alpha_composite(nebula())
-
-    # Thaumaturge's 16 px book at four times its size.
-    book = from_jar("assets/thaumaturge/textures/item/thaumonomicon.png").resize((64, 64), Image.NEAREST)
-    bx, by = 22, 20
-    cx, cy = bx + 32, by + 32
-
-    # The sky darkened toward the frame, so the book and the seal stand out of it.
-    sky = np.array(canvas).astype(float)
-    yy, xx = np.mgrid[0:GRID, 0:GRID].astype(float)
-    falloff = np.clip(np.hypot(xx - cx, yy - cy) / 80.0, 0.0, 1.0)
-    sky[..., :3] *= (1.0 - 0.6 * falloff ** 1.5)[..., None]
-    canvas = Image.fromarray(sky.astype(np.uint8))
-
-    # The book lies on the map as research does: light behind it, tendrils reaching out of it.
-    canvas.alpha_composite(glow(cx, cy, 44, (255, 220, 255), 0.9))
-    wave_line(canvas, cx, cy, 112, 22, (0, 255, 0), 0.0)
-    wave_line(canvas, cx, cy, 14, 108, (60, 90, 255), 1.7)
-    wave_line(canvas, cx, cy, 104, 64, (0, 255, 0), 3.1)
-    canvas.alpha_composite(frame())
-
-    canvas.alpha_composite(shadow(book), (bx + 3, by + 3))
-    canvas.alpha_composite(book, (bx, by))
-
-    # The new-research sparkle at the book's upper corner, as the map marks fresh research.
-    sparkle = Image.open(os.path.join(GUI, "sparkle.png")).convert("RGBA").crop((0, 0, 16, 16)).resize((32, 32), Image.NEAREST)
-    canvas.alpha_composite(sparkle, (bx - 12, by - 12))
-
-    # Thaumaturge's TT at its own pixel size, pressed over the frame's corner like a seal.
-    logo = from_jar("logo.png").resize((64, 64), Image.NEAREST)
-    seal = logo.crop(logo.getbbox())
-    sx, sy = GRID - seal.width - 3, GRID - seal.height - 3
-    canvas.alpha_composite(shadow(seal, 0.7), (sx + 3, sy + 3))
-    canvas.alpha_composite(seal, (sx, sy))
-    return canvas.resize((GRID * SCALE, GRID * SCALE), Image.NEAREST)
+    for rows in (BOARD, CORNER, SPARKLE):
+        assert len({len(row) for row in rows}) == 1, rows
+    assert len(BOARD[0]) == WINDOW and len(BOARD) == BORDER
+    icon = Image.new("RGB", (GRID, GRID))
+    px = icon.load()
+    sky(px)
+    frame(px)
+    book = from_jar(BOOK)
+    book = book.resize((book.width * 2, book.height * 2), Image.NEAREST)
+    icon.paste(book, BOOK_AT, book)
+    stamp(px, SPARKLE, *SPARKLE_AT)
+    return icon.resize((GRID * SCALE, GRID * SCALE), Image.NEAREST)
 
 
 def main():

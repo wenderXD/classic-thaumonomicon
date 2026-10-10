@@ -47,24 +47,23 @@ import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * Thaumaturge's research map, drawn as Thaumcraft 4 drew its Thaumonomicon.
+ * Thaumaturge's research map, drawn like the Thaumcraft 4 Thaumonomicon.
  *
- * <p>A fixed book-sized pane in the middle of the screen rather than a frame round the whole of
- * it: a carved wooden border with runes cut into it, looking onto a nebula that drifts slower than
- * the tree laid over it. The categories are tabs down the pane's side; the research sits on stone
- * plates - square for the spine of a category, hexagonal for its side work, round for the
- * milestones, parchment for hidden discoveries - joined by tendrils. Finished research is lit, the
- * next research breathes, and what is still out of reach is dim, with its name written in a script
- * the player cannot read yet.
+ * <p>The map is a fixed book-sized pane in the middle of the screen: a wooden frame with carved
+ * runes around a window onto a nebula that scrolls slower than the research tree. Categories are
+ * tabs down the side of the pane. Entries sit on plates (square for a category's main line,
+ * hexagonal for side research, round for milestones, parchment for hidden discoveries) joined by
+ * tendrils. Finished research is lit, research that can be started next pulses, and research out
+ * of reach is dim with its name in a script the player can't read yet.
  *
- * <p>Only the look is Thaumcraft 4's. What an entry is, whether it can be seen or started, and
- * what clicking it does are all Thaumaturge's rules, read through its API and its payloads exactly
- * as its own map reads them, so progression is untouched. Two Thaumaturge features have no place
- * in the old book and are fitted in quietly: the search, as a tab of its own at the foot of the
- * left-hand column, and categories added by other mods, which continue the tab columns.
+ * <p>Only the drawing is different. What an entry is, whether it can be seen or started and what
+ * clicking it does all come from Thaumaturge's API and payloads, read the same way its own map
+ * reads them, so progression is unchanged. Two Thaumaturge features that Thaumcraft 4 didn't have
+ * are added: the search, as a tab at the bottom of the left column, and categories from other
+ * mods, which continue the tab columns.
  */
 public final class ClassicThaumonomiconScreen extends Screen {
-    // The frame sheet, laid out by Thaumaturge's Legacy (art/gui/thaumonomicon.py).
+    // Frame sheet layout, from Thaumaturge's Legacy (art/gui/thaumonomicon.py).
     private static final Identifier FRAME = ClassicThaumonomicon.id("textures/gui/book_frame.png");
     private static final Identifier NEBULA = ClassicThaumonomicon.id("textures/gui/book_nebula.png");
     private static final Identifier SPARKLE = ClassicThaumonomicon.id("textures/gui/sparkle.png");
@@ -133,7 +132,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
     private static final int SPARKLE_FRAMES = 16;
     private static final long SPARKLE_FRAME_MS = 50L;
 
-    /** The hover box: a flat wash of black, the name at full size and the rest at half beneath it. */
+    /** The hover box: flat black background, the name at full size and the rest at half size below. */
     private static final int TOOLTIP_BACKGROUND = 0xC0000000;
     private static final int TOOLTIP_HEAD = 12;
     private static final int TOOLTIP_LINE = 6;
@@ -173,7 +172,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
     private static final float CLACK_VOLUME = 0.4F;
     private static final float PAGE_VOLUME = 0.66F;
 
-    /** Kept between openings, so the book falls open where it was left. */
+    /** Kept between openings so the book reopens where it was left. */
     private static @Nullable Identifier persistedCategory;
     private static double persistedMapX = Double.NaN;
     private static double persistedMapY = Double.NaN;
@@ -206,9 +205,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         super(Component.translatable("item.thaumaturge.thaumonomicon"));
     }
 
-    // ------------------------------------------------------------------
     // Setup
-    // ------------------------------------------------------------------
 
     @Override
     protected void init() {
@@ -295,9 +292,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     /**
-     * How far the map can be dragged: until the outermost research in each direction sits in the
-     * middle of the window, so nothing can be pulled out of sight and no category drifts off into
-     * empty sky.
+     * Drag limits. The map stops when the outermost research in each direction reaches the middle
+     * of the window, so nothing can be dragged out of sight.
      */
     private void updateBounds(IPlayerKnowledge knowledge) {
         int minCol = Integer.MAX_VALUE;
@@ -352,9 +348,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return false;
     }
 
-    // ------------------------------------------------------------------
     // What the player knows
-    // ------------------------------------------------------------------
 
     private IPlayerKnowledge knowledge() {
         return KnowledgeAccess.of(minecraft.player);
@@ -370,9 +364,9 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     /**
-     * Whether an entry is on the map at all, by Thaumaturge's rule: anything known is; a hidden
-     * entry only once it could be started; and nothing whose parents are themselves off the map.
-     * Worked out afresh every frame, since knowledge can change while the book is open.
+     * Whether an entry is on the map at all, by Thaumaturge's rule: known entries always, a hidden
+     * entry only once it could be started, and never an entry whose parents are off the map.
+     * Recomputed every frame, since knowledge can change while the book is open.
      */
     private boolean isVisible(IPlayerKnowledge knowledge, EntryNode node) {
         if (knowledge.isResearchKnown(node.id)) {
@@ -382,7 +376,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         if (known != null) {
             return known;
         }
-        // Provisionally visible while its parents are checked, which also ends any cycle.
+        // Mark it visible while its parents are checked. This also breaks cycles.
         visibility.put(node.id, Boolean.TRUE);
         boolean visible = computeVisible(knowledge, node);
         visibility.put(node.id, visible);
@@ -448,9 +442,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return total == 0 ? 0 : (int) (known * 100.0F / total);
     }
 
-    // ------------------------------------------------------------------
     // Layout
-    // ------------------------------------------------------------------
 
     private int paneLeft() {
         return (width - PANE_WIDTH) / 2;
@@ -524,11 +516,9 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return mouseX >= x && mouseX < x + TAB && mouseY >= paneTop() && mouseY < paneTop() + TABS_PER_COLUMN * TAB;
     }
 
-    // ------------------------------------------------------------------
     // Drawing
-    // ------------------------------------------------------------------
 
-    /** A plain dark wash behind the book, as the old book had, rather than a blur. */
+    /** A plain dark overlay behind the book, like Thaumcraft 4, instead of a blur. */
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         extractTransparentBackground(graphics);
@@ -558,8 +548,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
         int scrollY = Mth.floor(mapY);
         hovered = null;
 
-        // The map is clipped to the window: entries on the rim and wandering tendrils would
-        // otherwise spill over the frame and out past the book.
+        // Clip the map to the window, or entries on the rim and tendrils would draw over the frame
+        // and outside the book.
         graphics.enableScissor(mapLeft, mapTop, mapLeft + MAP_WIDTH, mapTop + MAP_HEIGHT);
         drawBackdrop(graphics, mapLeft, mapTop, scrollX, scrollY);
         if (searching) {
@@ -590,8 +580,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     /**
-     * The sky behind the tree, slid against the map by a fixed span however large the category,
-     * so the tree reads as floating over it.
+     * The background behind the tree. It moves by a fixed span however large the category is, which
+     * gives the parallax.
      */
     private void drawBackdrop(GuiGraphicsExtractor graphics, int mapLeft, int mapTop, int scrollX, int scrollY) {
         if (activeCategory == null) {
@@ -606,9 +596,9 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     /**
-     * The old book hung every category over the same violet nebula except Eldritch, which had a
-     * darker sky of its own; Thaumaturge's Eldritch background stands in for that one. Categories
-     * from other mods keep whatever they ship with.
+     * Thaumcraft 4 used the same violet nebula for every category except Eldritch, which had a
+     * darker one. Thaumaturge's Eldritch background is used for that. Categories from other mods
+     * keep their own.
      */
     private static Identifier backdropFor(Holder.Reference<IResearchCategory> category) {
         Identifier id = category.key().identifier();
@@ -618,9 +608,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
     /**
      * The tendrils. Each runs from an entry toward the research it follows from: dark and still
-     * once the entry is done, green and waving when it is the next thing to do, blue when it is
-     * further off than that. Siblings, which Thaumaturge draws as decoration, are joined the same
-     * way in their own darker blue.
+     * once the entry is done, green and waving when it is next, blue when it is further off.
+     * Siblings, which Thaumaturge draws as decoration, are joined the same way in a darker blue.
      */
     private void drawConnections(GuiGraphicsExtractor graphics, IPlayerKnowledge knowledge, int mapLeft, int mapTop, int scrollX, int scrollY, float time) {
         for (EntryNode source : activeNodes()) {
@@ -710,8 +699,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     /**
-     * Which plate an entry sits on. Round wins outright; otherwise Thaumaturge's hexagonal entries
-     * take the old book's pointed plate and the rest its square one, each in stone, or in parchment
+     * Which plate an entry sits on. Round entries get the round plate. Otherwise Thaumaturge's
+     * hexagonal entries get the pointed plate and the rest the square one, in stone, or in parchment
      * when the entry is a hidden discovery.
      */
     private static int plateU(IResearchEntry entry) {
@@ -725,7 +714,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return hidden ? PLATE_HIDDEN_U : PLATE_SQUARE_U;
     }
 
-    /** The slow breath on research that could be started next. */
+    /** The slow pulse on research that could be started next. */
     private static float pulse() {
         double phase = (System.currentTimeMillis() % PULSE_PERIOD_MS) / (double) PULSE_PERIOD_MS;
         return (float) Math.sin(phase * Math.PI * 2.0) * 0.25F + 0.75F;
@@ -737,22 +726,22 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     private void drawForbidden(GuiGraphicsExtractor graphics, int centreX, int centreY) {
-        // Counted backwards, so the wisps curl inward.
+        // Counted backwards so the wisps curl inward.
         int frame = FORBIDDEN_FRAMES - 1 - (int) (System.currentTimeMillis() / FORBIDDEN_FRAME_MS % FORBIDDEN_FRAMES);
         graphics.blit(RenderPipelines.GUI_TEXTURED, FORBIDDEN, centreX - FORBIDDEN_SIZE / 2, centreY - FORBIDDEN_SIZE / 2, (float) (frame * FORBIDDEN_CELL), 0.0F, FORBIDDEN_SIZE, FORBIDDEN_SIZE,
                 FORBIDDEN_CELL, FORBIDDEN_CELL, FORBIDDEN_FRAMES * FORBIDDEN_CELL, FORBIDDEN_CELL, FORBIDDEN_TINT);
     }
 
-    /** The new-research sparkle, turned through its sixteen frames. */
+    /** The new-research sparkle, cycling through its sixteen frames. */
     private static void drawSparkle(GuiGraphicsExtractor graphics, int x, int y) {
         int frame = (int) (System.currentTimeMillis() / SPARKLE_FRAME_MS % SPARKLE_FRAMES);
         graphics.blit(RenderPipelines.GUI_TEXTURED, SPARKLE, x, y, (float) (frame * ICON), 0.0F, ICON, ICON, SPARKLE_FRAMES * ICON, ICON);
     }
 
     /**
-     * An entry's icon. Texture icons take the plate's brightness, so they breathe and dim with it;
-     * items cannot be tinted, so one still out of reach is shaded over instead. Focus icons go
-     * through Thaumaturge's own renderer.
+     * An entry's icon. Texture icons take the plate's brightness, so they pulse and dim with it.
+     * Items can't be tinted, so one still out of reach gets a dark overlay. Focus icons go through
+     * Thaumaturge's own renderer.
      */
     private void drawIcon(GuiGraphicsExtractor graphics, Object icon, int x, int y, float brightness, boolean locked) {
         if (icon instanceof Identifier texture) {
@@ -798,8 +787,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
     /**
      * The tabs, drawn before the pane so its edge covers their inner ends. The open category's tab
-     * stands out further from the book and is lit; the rest sit back under a shade. Tabs on the right
-     * are the left ones mirrored.
+     * sticks out further and is lit, the others are shaded. Tabs on the right are the left ones
+     * mirrored.
      */
     private void drawTabs(GuiGraphicsExtractor graphics, IPlayerKnowledge knowledge) {
         for (int index = 0; index < tabCategories.size(); index++) {
@@ -835,16 +824,14 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
     private static void drawTabSprite(GuiGraphicsExtractor graphics, int x, int y, int u, boolean mirrored) {
         if (mirrored) {
-            // Read right to left: a negative source width flips the sprite.
+            // A negative source width flips the sprite.
             graphics.blit(RenderPipelines.GUI_TEXTURED, FRAME, x, y, (float) (u + TAB), (float) TAB_V, TAB, TAB, -TAB, TAB, SHEET, SHEET);
         } else {
             graphics.blit(RenderPipelines.GUI_TEXTURED, FRAME, x, y, (float) u, (float) TAB_V, TAB, TAB, SHEET, SHEET);
         }
     }
 
-    // ------------------------------------------------------------------
     // Tooltips
-    // ------------------------------------------------------------------
 
     private void drawEntryTooltip(GuiGraphicsExtractor graphics, IPlayerKnowledge knowledge, EntryNode node, int mouseX, int mouseY) {
         boolean complete = knowledge.isResearchComplete(node.id);
@@ -918,9 +905,9 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     /**
-     * The old book's hover box: no border, a flat black wash, the headline at full size and every
-     * other line at half size beneath it. Half-size lines are measured at half width, which lets a
-     * long sentence sit under a short name without widening the box to match.
+     * The Thaumcraft 4 hover box: no border, a flat black background, the first line at full size
+     * and every other line at half size below it. Half-size lines are measured at half width, so a
+     * long sentence under a short name doesn't widen the box to its full-size width.
      */
     private void drawTooltip(GuiGraphicsExtractor graphics, Component title, int titleColour, List<Line> lines, int mouseX, int mouseY) {
         int boxWidth = font.width(title);
@@ -930,7 +917,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         int boxHeight = lines.isEmpty() ? font.lineHeight - 1 : TOOLTIP_HEAD + (lines.size() - 1) * TOOLTIP_LINE + font.lineHeight / 2;
         int x = mouseX + 6;
         int y = mouseY - 4;
-        // Kept on screen: flipped to the cursor's other side near the right edge, and lifted near the bottom.
+        // Keep it on screen: flip to the cursor's other side near the right edge, lift it near the bottom.
         if (x + boxWidth + 3 > width) {
             x = Math.max(3, mouseX - 6 - boxWidth);
         }
@@ -953,9 +940,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return Component.translatable("research_category." + id.getNamespace() + "." + id.getPath());
     }
 
-    // ------------------------------------------------------------------
     // Search
-    // ------------------------------------------------------------------
 
     private void setSearching(boolean on) {
         searching = on;
@@ -1071,9 +1056,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return null;
     }
 
-    // ------------------------------------------------------------------
     // Input
-    // ------------------------------------------------------------------
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
@@ -1137,7 +1120,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return super.mouseClicked(event, doubleClick);
     }
 
-    /** The entry under a point of the window; where plates overlap, the one drawn last, which is on top. */
+    /** The entry under a point of the window. Where plates overlap, the one drawn last (on top). */
     private @Nullable EntryNode entryAt(IPlayerKnowledge knowledge, double mouseX, double mouseY) {
         if (!inMap(mouseX, mouseY)) {
             return null;
@@ -1244,9 +1227,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         }
     }
 
-    // ------------------------------------------------------------------
     // Records
-    // ------------------------------------------------------------------
 
     private record EntryNode(Identifier id, IResearchEntry entry, Holder<IResearchEntry> holder, Holder.Reference<IResearchCategory> category) {
     }

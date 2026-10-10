@@ -32,14 +32,13 @@ import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 
 /**
- * Drives a dev client through the book and screenshots it, so the look can be checked without a
- * person clicking through it. Run with {@code gradlew runBookVisualCheck}; the pictures land in
+ * Dev-only screenshot run for the book. {@code gradlew runBookVisualCheck} writes the pictures to
  * {@code runs/book-check/screenshots}.
  *
- * <p>It makes a fresh creative world, opens the book the way Thaumaturge does (so the swap is
- * exercised too), grants research in steps with Thaumaturge's own commands, and shoots each state:
- * a new player's book, every category with everything learned, a hover box, the search, and an
- * entry's pages. Then it quits. Not shipped: the jar leaves this class out.
+ * <p>It makes a new creative world, opens the book the way Thaumaturge does (so the screen swap is
+ * tested too), grants research in steps with Thaumaturge's own commands and screenshots each
+ * state: a new player's book, every category with everything learned, a hover box, the search and
+ * an entry's pages. Then it quits. The jar leaves this class out.
  */
 public final class BookVisualCheck {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -59,7 +58,7 @@ public final class BookVisualCheck {
     }
 
     private static void buildScript() {
-        // Let the world settle, the research registries sync and the starting research arrive.
+        // Wait for the world to load, the research registries to sync and the starting research to arrive.
         pause(200);
         run(mc -> mc.setScreen(ThaumonomiconBrowserScreen.reopen()));
         pause(30);
@@ -200,7 +199,7 @@ public final class BookVisualCheck {
         SCRIPT.add(new Step(mc -> Screenshot.grab(mc.gameDirectory, name + ".png", mc.getMainRenderTarget(), 1, message -> LOGGER.info("[BookVisualCheck] {}", message.getString())), 5));
     }
 
-    /** Puts the cursor at a point in GUI coordinates; the frames after draw with it there. */
+    /** Moves the cursor to a point in GUI coordinates. Later frames draw with it there. */
     private static void moveMouse(Minecraft mc, double guiX, double guiY) {
         double scale = mc.getWindow().getGuiScale();
         try {

@@ -14,28 +14,25 @@ import org.joml.Matrix3x2fc;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The lines Thaumcraft 4's map joins research with: not ruled connectors but tendrils that reach
- * out of an entry toward the one it follows from.
+ * The curved lines between research entries, built the way Thaumcraft 4's map builds them.
  *
- * <p>A tendril is a chain of short steps from the child toward the parent. Along the axis the two
- * are furthest apart on, the first step is doubled and every later one a little shorter, and each
- * point is placed at "step size times steps taken" from the child, so the chain bows outward and
- * comes to rest almost exactly on the parent. Across the other axis it runs straight. That bow is
- * the curve the old book's trees are drawn with.
+ * <p>A tendril is a chain of short steps from the child toward the parent. On the axis where the
+ * two are furthest apart, the first step is doubled and every later one is a little shorter, and
+ * each point is placed at "step size times steps taken" from the child. The chain bows outward and
+ * ends almost exactly on the parent. On the other axis it runs straight.
  *
- * <p>An unfinished link also waves, most at the child and not at all at the parent, and fades in
- * along its length while darkening toward its end, so it reads in the direction the research has to
- * be worked through. A finished link is drawn plain and still.
+ * <p>An unfinished link also waves (most at the child, not at all at the parent), fades in along
+ * its length and darkens toward its end. A finished link is plain and still.
  *
- * <p>Every tendril on the map goes into one ribbon of quads, submitted as a single GUI element.
- * Drawn as separate rectangles they would be thousands of tiny overlapping elements a frame, and
- * the GUI stacks each element that overlaps another on a layer of its own.
+ * <p>Every tendril on the map goes into one strip of quads, submitted as a single GUI element.
+ * As separate rectangles they would be thousands of tiny overlapping elements a frame, and the GUI
+ * puts each element that overlaps another on a layer of its own.
  */
 final class Tendrils {
     /**
-     * How far a waving tendril strays from its path. Thaumcraft 4 used five pixels on lines three
-     * screen pixels thick; at one GUI pixel thick that reads as a much busier ripple, so this is the
-     * calmer figure Thaumaturge's Legacy settled on for the same artwork.
+     * How far a waving tendril moves off its path. Thaumcraft 4 used five pixels on lines three
+     * screen pixels thick. At one GUI pixel thick that looks too busy, so this is the smaller value
+     * Thaumaturge's Legacy uses for the same artwork.
      */
     private static final float WAVE_AMPLITUDE = 2.5F;
     private static final float HALF_THICKNESS = 0.5F;
@@ -94,7 +91,7 @@ final class Tendrils {
         ribbon(steps + 1);
     }
 
-    /** Hands everything added so far to the GUI as one element, and starts afresh. */
+    /** Submits everything added so far to the GUI as one element and starts over. */
     void submit(GuiGraphicsExtractor graphics) {
         if (vertices == 0) {
             return;
@@ -116,10 +113,9 @@ final class Tendrils {
     }
 
     /**
-     * Turns a run of points into a ribbon one pixel wide. Neighbouring quads share their edge at
-     * each point, set square to the line's direction through it, so the ribbon has no gaps or
-     * overlaps at its joints, and each edge takes its point's colour, so it shades smoothly along
-     * its length as the old line strip did.
+     * Turns a run of points into a strip one pixel wide. Neighbouring quads share their edge at
+     * each point, perpendicular to the line there, so the joints have no gaps or overlaps. Each edge
+     * takes its point's colour, which shades the strip along its length like the old line strip.
      */
     private void ribbon(int points) {
         ensureVertices(vertices + (points - 1) * 4);
