@@ -12,18 +12,13 @@ version = mod_version
 group = mod_group_id
 
 base {
-    archivesName = mod_archive_name
+    archivesName = "${mod_archive_name}-${minecraft_version}"
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(java_version as int)
 
 repositories {
     mavenLocal()
-    // Thaumaturge itself is only published on CurseForge.
-    exclusiveContent {
-        forRepository { maven { url = 'https://cursemaven.com' } }
-        filter { includeGroup 'curse.maven' }
-    }
     exclusiveContent {
         forRepository { maven { url = 'https://api.modrinth.com/maven' } }
         filter { includeGroup 'maven.modrinth' }
@@ -33,6 +28,11 @@ repositories {
 
 neoForge {
     version = project.neo_version
+
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
 
     runs {
         client {
@@ -61,11 +61,11 @@ neoForge {
 }
 
 dependencies {
-    // The addon is compiled against the released Thaumaturge jar and runs alongside it in dev.
-    implementation "curse.maven:thaumaturge-1628024:${thaumaturge_curse_file}"
+    // Thaumaturge's 1.21.1 branch has no published build, so the addon compiles against a local one in libs/.
+    implementation files("libs/thaumaturge-${minecraft_version}-NeoForge-${thaumaturge_version}.jar")
     // Thaumaturge's own required dependencies, needed only to launch the dev client.
     runtimeOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}+${minecraft_version}"
-    runtimeOnly "maven.modrinth:XaDC71GB:${lithostitched_modrinth_version}"
+    runtimeOnly "maven.modrinth:lithostitched:${lithostitched_version}"
 }
 
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {

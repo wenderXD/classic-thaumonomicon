@@ -2,7 +2,7 @@ package com.wenderxd.classicthaumonomicon;
 
 import com.leclowndu93150.thaumaturge.client.screen.research.ThaumonomiconBrowserScreen;
 import com.wenderxd.classicthaumonomicon.client.ClassicThaumonomiconScreen;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -37,8 +37,8 @@ public final class ClassicThaumonomicon {
         }
     }
 
-    public static Identifier id(String path) {
-        return Identifier.fromNamespaceAndPath(MOD_ID, path);
+    public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
     }
 
     private static void onScreenOpening(ScreenEvent.Opening event) {

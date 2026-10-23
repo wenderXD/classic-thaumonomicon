@@ -17,10 +17,8 @@ import net.minecraft.client.MouseHandler;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraft.client.input.CharacterEvent;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.MouseButtonInfo;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -99,7 +97,7 @@ public final class BookVisualCheck {
         pause(5);
         run(mc -> {
             for (char c : "wand".toCharArray()) {
-                mc.screen.charTyped(new CharacterEvent(c));
+                mc.screen.charTyped(c, 0);
             }
         });
         pause(10);
@@ -118,7 +116,7 @@ public final class BookVisualCheck {
         pause(20);
         run(mc -> check(mc.screen instanceof EntryDetailScreen, "clicking an entry opened its pages"));
         shot("09_entry");
-        run(mc -> mc.screen.keyPressed(new KeyEvent(GLFW.GLFW_KEY_BACKSPACE, 0, 0)));
+        run(BookVisualCheck::goBack);
         pause(10);
         run(mc -> check(mc.screen instanceof ClassicThaumonomiconScreen, "going back from an entry lands on the classic map"));
 
@@ -132,7 +130,7 @@ public final class BookVisualCheck {
         run(mc -> LOGGER.info("[BookVisualCheck] reopened onto {}", mc.screen == null ? "nothing" : mc.screen.getClass().getSimpleName()));
         run(mc -> {
             if (mc.screen instanceof EntryDetailScreen) {
-                mc.screen.keyPressed(new KeyEvent(GLFW.GLFW_KEY_BACKSPACE, 0, 0));
+                goBack(mc);
             }
         });
         pause(10);
@@ -162,7 +160,7 @@ public final class BookVisualCheck {
             if (!worldRequested && mc.screen instanceof TitleScreen) {
                 worldRequested = true;
                 LOGGER.info("[BookVisualCheck] creating world '{}'", WORLD);
-                LevelSettings settings = new LevelSettings(WORLD, GameType.CREATIVE, LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT);
+                LevelSettings settings = new LevelSettings(WORLD, GameType.CREATIVE, false, Difficulty.NORMAL, true, new GameRules(), WorldDataConfiguration.DEFAULT);
                 mc.createWorldOpenFlows().createFreshLevel(WORLD, settings, new WorldOptions(20261008L, false, false), WorldPresets::createNormalWorldDimensions, new TitleScreen());
             }
             return;
@@ -196,7 +194,7 @@ public final class BookVisualCheck {
     }
 
     private static void shot(String name) {
-        SCRIPT.add(new Step(mc -> Screenshot.grab(mc.gameDirectory, name + ".png", mc.getMainRenderTarget(), 1, message -> LOGGER.info("[BookVisualCheck] {}", message.getString())), 5));
+        SCRIPT.add(new Step(mc -> Screenshot.grab(mc.gameDirectory, name + ".png", mc.getMainRenderTarget(), message -> LOGGER.info("[BookVisualCheck] {}", message.getString())), 5));
     }
 
     /** Moves the cursor to a point in GUI coordinates. Later frames draw with it there. */
@@ -232,14 +230,21 @@ public final class BookVisualCheck {
         clickAt(mc, (screen.width - 256) / 2.0 - 12, (screen.height - 230) / 2.0 + 8 * 24 + 12);
     }
 
+    /** Leaves an entry's pages for the map. Thaumaturge's 1.21.1 entry screen does that on a right click. */
+    private static void goBack(Minecraft mc) {
+        Screen screen = mc.screen;
+        if (screen != null) {
+            screen.mouseClicked(screen.width / 2.0, screen.height / 2.0, GLFW.GLFW_MOUSE_BUTTON_RIGHT);
+        }
+    }
+
     private static void clickAt(Minecraft mc, double x, double y) {
         Screen screen = mc.screen;
         if (screen == null) {
             return;
         }
-        MouseButtonEvent event = new MouseButtonEvent(x, y, new MouseButtonInfo(0, 0));
-        screen.mouseClicked(event, false);
-        screen.mouseReleased(event);
+        screen.mouseClicked(x, y, GLFW.GLFW_MOUSE_BUTTON_LEFT);
+        screen.mouseReleased(x, y, GLFW.GLFW_MOUSE_BUTTON_LEFT);
     }
 
     private static void check(boolean ok, String what) {

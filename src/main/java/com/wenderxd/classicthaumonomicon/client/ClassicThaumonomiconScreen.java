@@ -1,8 +1,8 @@
 package com.wenderxd.classicthaumonomicon.client;
 
 import com.leclowndu93150.thaumaturge.TTIds;
-import com.leclowndu93150.thaumaturge.api.capability.IPlayerKnowledge;
-import com.leclowndu93150.thaumaturge.api.capability.KnowledgeAccess;
+import com.leclowndu93150.thaumaturge.api.capability.PlayerResearch;
+import com.leclowndu93150.thaumaturge.api.capability.PlayerResearchAccess;
 import com.leclowndu93150.thaumaturge.api.capability.ResearchFlag;
 import com.leclowndu93150.thaumaturge.api.research.IResearchCategory;
 import com.leclowndu93150.thaumaturge.api.research.IResearchEntry;
@@ -17,8 +17,16 @@ import com.leclowndu93150.thaumaturge.client.screen.research.EntryDetailScreen;
 import com.leclowndu93150.thaumaturge.network.ServerboundClearResearchFlagsPayload;
 import com.leclowndu93150.thaumaturge.network.ServerboundUnlockResearchPayload;
 import com.leclowndu93150.thaumaturge.registry.TTSounds;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import com.wenderxd.classicthaumonomicon.ClassicConfig;
 import com.wenderxd.classicthaumonomicon.ClassicThaumonomicon;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -26,24 +34,23 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import javax.annotation.Nullable;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.Mth;
+import net.minecraft.util.PngInfo;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-import org.jspecify.annotations.Nullable;
+import net.neoforged.neoforge.network.PacketDistributor;
+import org.joml.Matrix4f;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -64,11 +71,12 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class ClassicThaumonomiconScreen extends Screen {
     // Frame sheet layout, from Thaumaturge's Legacy (art/gui/thaumonomicon.py).
-    private static final Identifier FRAME = ClassicThaumonomicon.id("textures/gui/book_frame.png");
-    private static final Identifier NEBULA = ClassicThaumonomicon.id("textures/gui/book_nebula.png");
-    private static final Identifier SPARKLE = ClassicThaumonomicon.id("textures/gui/sparkle.png");
-    private static final Identifier FORBIDDEN = ClassicThaumonomicon.id("textures/gui/forbidden.png");
+    private static final ResourceLocation FRAME = ClassicThaumonomicon.id("textures/gui/book_frame.png");
+    private static final ResourceLocation NEBULA = ClassicThaumonomicon.id("textures/gui/book_nebula.png");
+    private static final ResourceLocation SPARKLE = ClassicThaumonomicon.id("textures/gui/sparkle.png");
+    private static final ResourceLocation FORBIDDEN = ClassicThaumonomicon.id("textures/gui/forbidden.png");
     private static final int SHEET = 256;
+    private static final int WHITE = 0xFFFFFFFF;
 
     private static final int PANE_WIDTH = 256;
     private static final int PANE_HEIGHT = 230;
@@ -136,6 +144,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
     private static final int TOOLTIP_BACKGROUND = 0xC0000000;
     private static final int TOOLTIP_HEAD = 12;
     private static final int TOOLTIP_LINE = 6;
+    /** In front of item icons, which draw at z 150. Vanilla tooltips use the same depth. */
+    private static final float TOOLTIP_Z = 400.0F;
     private static final int NAME = 0xFFFFFFFF;
     private static final int NAME_SPECIAL = 0xFFFFFF80;
     private static final int NAME_LOCKED = 0xFF808080;
@@ -149,7 +159,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
     private static final int MAX_WARP_LEVEL = 5;
 
     /** Research still out of reach is named in the enchanting table's script, as the old book did. */
-    private static final FontDescription ARCANE_FONT = new FontDescription.Resource(Identifier.withDefaultNamespace("alt"));
+    private static final ResourceLocation ARCANE_FONT = ResourceLocation.withDefaultNamespace("alt");
 
     private static final int SEARCH_BOX_INSET = 4;
     private static final int SEARCH_BOX_WIDTH = 120;
@@ -173,7 +183,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
     private static final float PAGE_VOLUME = 0.66F;
 
     /** Kept between openings so the book reopens where it was left. */
-    private static @Nullable Identifier persistedCategory;
+    private static @Nullable ResourceLocation persistedCategory;
     private static double persistedMapX = Double.NaN;
     private static double persistedMapY = Double.NaN;
     private static boolean persistedSearching;
@@ -181,13 +191,14 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
     private final List<Holder.Reference<IResearchCategory>> allCategories = new ArrayList<>();
     private final List<Holder.Reference<IResearchCategory>> tabCategories = new ArrayList<>();
-    private final Map<Identifier, EntryNode> nodesById = new HashMap<>();
+    private final Map<ResourceLocation, EntryNode> nodesById = new HashMap<>();
     private final Map<Holder.Reference<IResearchCategory>, List<EntryNode>> nodesByCategory = new HashMap<>();
-    private final Map<Identifier, Boolean> visibility = new HashMap<>();
+    private final Map<ResourceLocation, Boolean> visibility = new HashMap<>();
     private final List<SearchResult> searchResults = new ArrayList<>();
+    private final Map<ResourceLocation, Optional<PngInfo>> iconSizes = new HashMap<>();
     private final Tendrils tendrils = new Tendrils();
 
-    private Holder.@Nullable Reference<IResearchCategory> activeCategory;
+    private @Nullable Holder.Reference<IResearchCategory> activeCategory;
     private double mapX;
     private double mapY;
     private int minMapX;
@@ -224,11 +235,11 @@ public final class ClassicThaumonomiconScreen extends Screen {
         searchField.setVisible(false);
         addRenderableWidget(searchField);
 
-        IPlayerKnowledge knowledge = knowledge();
+        PlayerResearch knowledge = knowledge();
         refreshTabs(knowledge);
         Holder.Reference<IResearchCategory> remembered = null;
         for (Holder.Reference<IResearchCategory> ref : tabCategories) {
-            if (ref.key().identifier().equals(persistedCategory)) {
+            if (ref.key().location().equals(persistedCategory)) {
                 remembered = ref;
             }
         }
@@ -254,10 +265,10 @@ public final class ClassicThaumonomiconScreen extends Screen {
         List<Holder.Reference<IResearchCategory>> own = new ArrayList<>();
         List<Holder.Reference<IResearchCategory>> others = new ArrayList<>();
         minecraft.player.registryAccess().lookup(IResearchCategory.REGISTRY_KEY).ifPresent(lookup -> lookup.listElements().forEach(ref -> {
-            (ref.key().identifier().getNamespace().equals(TTIds.MODID) ? own : others).add(ref);
+            (ref.key().location().getNamespace().equals(TTIds.MODID) ? own : others).add(ref);
         }));
         Comparator<Holder.Reference<IResearchCategory>> order = Comparator.<Holder.Reference<IResearchCategory>>comparingInt(ref -> ref.value().index())
-                .thenComparing(ref -> ref.key().identifier().toString());
+                .thenComparing(ref -> ref.key().location().toString());
         own.sort(order);
         others.sort(order);
         allCategories.addAll(own);
@@ -267,14 +278,14 @@ public final class ClassicThaumonomiconScreen extends Screen {
             if (!(entry.category() instanceof Holder.Reference<IResearchCategory> category)) {
                 return;
             }
-            EntryNode node = new EntryNode(holder.key().identifier(), entry, holder, category);
+            EntryNode node = new EntryNode(holder.key().location(), entry, holder, category);
             nodesById.put(node.id, node);
             nodesByCategory.computeIfAbsent(category, key -> new ArrayList<>()).add(node);
         }));
     }
 
     /** The categories that get a tab: every one the player has opened up, Thaumaturge's first. */
-    private void refreshTabs(IPlayerKnowledge knowledge) {
+    private void refreshTabs(PlayerResearch knowledge) {
         tabCategories.clear();
         for (Holder.Reference<IResearchCategory> ref : allCategories) {
             if (isCategoryUnlocked(knowledge, ref)) {
@@ -284,7 +295,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         rightColumnScroll = Mth.clamp(rightColumnScroll, 0, maxRightColumnScroll());
     }
 
-    private void selectCategory(Holder.@Nullable Reference<IResearchCategory> category, IPlayerKnowledge knowledge) {
+    private void selectCategory(@Nullable Holder.Reference<IResearchCategory> category, PlayerResearch knowledge) {
         activeCategory = category;
         updateBounds(knowledge);
         mapX = (minMapX + maxMapX) / 2.0;
@@ -295,7 +306,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
      * Drag limits. The map stops when the outermost research in each direction reaches the middle
      * of the window, so nothing can be dragged out of sight.
      */
-    private void updateBounds(IPlayerKnowledge knowledge) {
+    private void updateBounds(PlayerResearch knowledge) {
         int minCol = Integer.MAX_VALUE;
         int maxCol = Integer.MIN_VALUE;
         int minRow = Integer.MAX_VALUE;
@@ -328,7 +339,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         persistedMapY = mapY;
         persistedSearching = searching;
         persistedQuery = searching && searchField != null ? searchField.getValue() : "";
-        persistedCategory = activeCategory == null ? null : activeCategory.key().identifier();
+        persistedCategory = activeCategory == null ? null : activeCategory.key().location();
     }
 
     @Override
@@ -350,17 +361,17 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
     // What the player knows
 
-    private IPlayerKnowledge knowledge() {
-        return KnowledgeAccess.of(minecraft.player);
+    private PlayerResearch knowledge() {
+        return PlayerResearchAccess.of(minecraft.player);
     }
 
     private List<EntryNode> activeNodes() {
         return activeCategory == null ? List.of() : nodesByCategory.getOrDefault(activeCategory, List.of());
     }
 
-    private static boolean isCategoryUnlocked(IPlayerKnowledge knowledge, Holder.Reference<IResearchCategory> ref) {
-        Optional<Identifier> gate = ref.value().requiredResearch();
-        return gate.isEmpty() || knowledge.isResearchComplete(gate.get());
+    private static boolean isCategoryUnlocked(PlayerResearch knowledge, Holder.Reference<IResearchCategory> ref) {
+        Optional<ResourceLocation> gate = ref.value().requiredResearch();
+        return gate.isEmpty() || knowledge.hasCompleted(gate.get());
     }
 
     /**
@@ -368,8 +379,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
      * entry only once it could be started, and never an entry whose parents are off the map.
      * Recomputed every frame, since knowledge can change while the book is open.
      */
-    private boolean isVisible(IPlayerKnowledge knowledge, EntryNode node) {
-        if (knowledge.isResearchKnown(node.id)) {
+    private boolean isVisible(PlayerResearch knowledge, EntryNode node) {
+        if (knowledge.knows(node.id)) {
             return true;
         }
         Boolean known = visibility.get(node.id);
@@ -383,7 +394,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return visible;
     }
 
-    private boolean computeVisible(IPlayerKnowledge knowledge, EntryNode node) {
+    private boolean computeVisible(PlayerResearch knowledge, EntryNode node) {
         boolean hidden = node.entry.hasMeta(ResearchEntryMeta.HIDDEN);
         if (hidden && (node.entry.parents().isEmpty() || !canUnlock(knowledge, node))) {
             return false;
@@ -397,13 +408,13 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return true;
     }
 
-    private boolean canUnlock(IPlayerKnowledge knowledge, EntryNode node) {
+    private boolean canUnlock(PlayerResearch knowledge, EntryNode node) {
         for (ResearchParent parent : node.entry.parents()) {
             if (!parent.isSatisfiedBy(knowledge)) {
                 return false;
             }
         }
-        return knowledge.isResearchKnown(node.id) || ResearchUnlockConditions.passes(minecraft.player, knowledge, node.id);
+        return knowledge.knows(node.id) || ResearchUnlockConditions.passes(minecraft.player, knowledge, node.id);
     }
 
     private static boolean hasWarp(IResearchEntry entry) {
@@ -418,16 +429,16 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return warp;
     }
 
-    private boolean categoryHasNews(IPlayerKnowledge knowledge, Holder.Reference<IResearchCategory> ref) {
+    private boolean categoryHasNews(PlayerResearch knowledge, Holder.Reference<IResearchCategory> ref) {
         for (EntryNode node : nodesByCategory.getOrDefault(ref, List.of())) {
-            if (knowledge.isResearchKnown(node.id) && (knowledge.hasResearchFlag(node.id, ResearchFlag.RESEARCH) || knowledge.hasResearchFlag(node.id, ResearchFlag.PAGE))) {
+            if (knowledge.knows(node.id) && (knowledge.hasFlag(node.id, ResearchFlag.RESEARCH) || knowledge.hasFlag(node.id, ResearchFlag.PAGE))) {
                 return true;
             }
         }
         return false;
     }
 
-    private int categoryCompletion(IPlayerKnowledge knowledge, Holder.Reference<IResearchCategory> ref) {
+    private int categoryCompletion(PlayerResearch knowledge, Holder.Reference<IResearchCategory> ref) {
         int total = 0;
         int known = 0;
         for (EntryNode node : nodesByCategory.getOrDefault(ref, List.of())) {
@@ -435,7 +446,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
                 continue;
             }
             total++;
-            if (knowledge.isResearchKnown(node.id)) {
+            if (knowledge.knows(node.id)) {
                 known++;
             }
         }
@@ -518,20 +529,13 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
     // Drawing
 
-    /** A plain dark overlay behind the book, like Thaumcraft 4, instead of a blur. */
     @Override
-    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
-        extractTransparentBackground(graphics);
-        minecraft.gui.extractDeferredSubtitles();
-    }
-
-    @Override
-    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         if (minecraft.player == null || searchField == null) {
-            super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+            super.render(graphics, mouseX, mouseY, partialTick);
             return;
         }
-        IPlayerKnowledge knowledge = knowledge();
+        PlayerResearch knowledge = knowledge();
         visibility.clear();
         refreshTabs(knowledge);
         if (activeCategory != null && !tabCategories.contains(activeCategory)) {
@@ -540,6 +544,32 @@ public final class ClassicThaumonomiconScreen extends Screen {
         updateBounds(knowledge);
         clampMap();
 
+        // The book, through renderBackground, then the search box.
+        super.render(graphics, mouseX, mouseY, partialTick);
+
+        Tab tab = hoveredTab(mouseX, mouseY);
+        if (tab != null) {
+            drawTabTooltip(graphics, knowledge, tab.category, mouseX, mouseY);
+        } else if (overSearchTab(mouseX, mouseY)) {
+            drawTooltip(graphics, Component.translatable("gui.thaumaturge.thaumonomicon.search"), NAME, List.of(), mouseX, mouseY);
+        } else if (hovered != null && !dragging) {
+            drawEntryTooltip(graphics, knowledge, hovered, mouseX, mouseY);
+        }
+    }
+
+    /**
+     * A plain dark overlay instead of a blur, like Thaumcraft 4, with the book on it. The book is
+     * the screen's background so that widgets draw over it.
+     */
+    @Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderTransparentBackground(graphics);
+        if (minecraft.player != null && searchField != null) {
+            drawBook(graphics, knowledge(), mouseX, mouseY, partialTick);
+        }
+    }
+
+    private void drawBook(GuiGraphics graphics, PlayerResearch knowledge, int mouseX, int mouseY, float partialTick) {
         int left = paneLeft();
         int top = paneTop();
         int mapLeft = mapLeft();
@@ -563,36 +593,23 @@ public final class ClassicThaumonomiconScreen extends Screen {
         graphics.disableScissor();
 
         drawTabs(graphics, knowledge);
-        graphics.blit(RenderPipelines.GUI_TEXTURED, FRAME, left, top, 0.0F, 0.0F, PANE_WIDTH, PANE_HEIGHT, SHEET, SHEET);
-
-        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
-
-        // Above every icon and every line of text drawn so far.
-        graphics.nextStratum();
-        Tab tab = hoveredTab(mouseX, mouseY);
-        if (tab != null) {
-            drawTabTooltip(graphics, knowledge, tab.category, mouseX, mouseY);
-        } else if (overSearchTab(mouseX, mouseY)) {
-            drawTooltip(graphics, Component.translatable("gui.thaumaturge.thaumonomicon.search"), NAME, List.of(), mouseX, mouseY);
-        } else if (hovered != null && !dragging) {
-            drawEntryTooltip(graphics, knowledge, hovered, mouseX, mouseY);
-        }
+        blit(graphics, FRAME, left, top, 0.0F, 0.0F, PANE_WIDTH, PANE_HEIGHT, SHEET, SHEET);
     }
 
     /**
      * The background behind the tree. It moves by a fixed span however large the category is, which
      * gives the parallax.
      */
-    private void drawBackdrop(GuiGraphicsExtractor graphics, int mapLeft, int mapTop, int scrollX, int scrollY) {
+    private void drawBackdrop(GuiGraphics graphics, int mapLeft, int mapTop, int scrollX, int scrollY) {
         if (activeCategory == null) {
-            graphics.blit(RenderPipelines.GUI_TEXTURED, NEBULA, mapLeft, mapTop, 0.0F, 0.0F, MAP_WIDTH, MAP_HEIGHT, MAP_WIDTH / 2, MAP_HEIGHT / 2, SHEET, SHEET);
+            blit(graphics, NEBULA, mapLeft, mapTop, 0.0F, 0.0F, MAP_WIDTH, MAP_HEIGHT, MAP_WIDTH / 2, MAP_HEIGHT / 2, SHEET, SHEET);
             return;
         }
         float acrossX = maxMapX > minMapX ? (float) (scrollX - minMapX) / (maxMapX - minMapX) : 0.5F;
         float acrossY = maxMapY > minMapY ? (float) (scrollY - minMapY) / (maxMapY - minMapY) : 0.5F;
         float u = Mth.clamp(acrossX, 0.0F, 1.0F) * BACKGROUND_SPAN_X;
         float v = Mth.clamp(acrossY, 0.0F, 1.0F) * BACKGROUND_SPAN_Y;
-        graphics.blit(RenderPipelines.GUI_TEXTURED, backdropFor(activeCategory), mapLeft, mapTop, u, v, MAP_WIDTH, MAP_HEIGHT, MAP_WIDTH / 2, MAP_HEIGHT / 2, SHEET, SHEET);
+        blit(graphics, backdropFor(activeCategory), mapLeft, mapTop, u, v, MAP_WIDTH, MAP_HEIGHT, MAP_WIDTH / 2, MAP_HEIGHT / 2, SHEET, SHEET);
     }
 
     /**
@@ -600,8 +617,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
      * darker one. Thaumaturge's Eldritch background is used for that. Categories from other mods
      * keep their own.
      */
-    private static Identifier backdropFor(Holder.Reference<IResearchCategory> category) {
-        Identifier id = category.key().identifier();
+    private static ResourceLocation backdropFor(Holder.Reference<IResearchCategory> category) {
+        ResourceLocation id = category.key().location();
         boolean classic = ClassicConfig.CLASSIC_BACKGROUNDS.get() && id.getNamespace().equals(TTIds.MODID) && !id.getPath().equals("eldritch");
         return classic ? NEBULA : category.value().background();
     }
@@ -611,12 +628,12 @@ public final class ClassicThaumonomiconScreen extends Screen {
      * once the entry is done, green and waving when it is next, blue when it is further off.
      * Siblings, which Thaumaturge draws as decoration, are joined the same way in a darker blue.
      */
-    private void drawConnections(GuiGraphicsExtractor graphics, IPlayerKnowledge knowledge, int mapLeft, int mapTop, int scrollX, int scrollY, float time) {
+    private void drawConnections(GuiGraphics graphics, PlayerResearch knowledge, int mapLeft, int mapTop, int scrollX, int scrollY, float time) {
         for (EntryNode source : activeNodes()) {
             if (!isVisible(knowledge, source)) {
                 continue;
             }
-            boolean sourceDone = knowledge.isResearchComplete(source.id);
+            boolean sourceDone = knowledge.hasCompleted(source.id);
             boolean reverse = source.entry.hasMeta(ResearchEntryMeta.REVERSE);
             for (ResearchParent parent : source.entry.parents()) {
                 EntryNode parentNode = nodesById.get(parent.id());
@@ -631,14 +648,14 @@ public final class ClassicThaumonomiconScreen extends Screen {
                     link(source, parentNode, mapLeft, mapTop, scrollX, scrollY, CONNECTOR_FAR, true, reverse, time);
                 }
             }
-            for (Identifier siblingId : source.entry.siblings()) {
+            for (ResourceLocation siblingId : source.entry.siblings()) {
                 EntryNode sibling = nodesById.get(siblingId);
                 if (sibling == null || !sibling.category.equals(activeCategory)) {
                     continue;
                 }
                 if (sourceDone) {
                     link(source, sibling, mapLeft, mapTop, scrollX, scrollY, CONNECTOR_SIBLING_DONE, false, reverse, time);
-                } else if (knowledge.isResearchComplete(siblingId)) {
+                } else if (knowledge.hasCompleted(siblingId)) {
                     link(source, sibling, mapLeft, mapTop, scrollX, scrollY, CONNECTOR_NEXT, true, reverse, time);
                 } else if (isVisible(knowledge, sibling)) {
                     link(source, sibling, mapLeft, mapTop, scrollX, scrollY, CONNECTOR_FAR, true, reverse, time);
@@ -660,7 +677,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         }
     }
 
-    private void drawEntries(GuiGraphicsExtractor graphics, IPlayerKnowledge knowledge, int mapLeft, int mapTop, int scrollX, int scrollY, int mouseX, int mouseY) {
+    private void drawEntries(GuiGraphics graphics, PlayerResearch knowledge, int mapLeft, int mapTop, int scrollX, int scrollY, int mouseX, int mouseY) {
         boolean mouseInMap = inMap(mouseX, mouseY);
         for (EntryNode node : activeNodes()) {
             int x = node.entry.column() * GRID - scrollX;
@@ -670,7 +687,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
             }
             int drawX = mapLeft + x;
             int drawY = mapTop + y;
-            boolean complete = knowledge.isResearchComplete(node.id);
+            boolean complete = knowledge.hasCompleted(node.id);
             boolean unlockable = canUnlock(knowledge, node);
 
             // Under the plate, so the stain spreads behind the entry and over its neighbours.
@@ -680,12 +697,12 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
             float brightness = complete ? 1.0F : unlockable ? pulse() : LOCKED_BRIGHTNESS;
             int tint = grey(brightness);
-            graphics.blit(RenderPipelines.GUI_TEXTURED, FRAME, drawX - 2, drawY - 2, plateU(node.entry), PLATE_V, PLATE, PLATE, SHEET, SHEET, tint);
+            blit(graphics, FRAME, drawX - 2, drawY - 2, plateU(node.entry), PLATE_V, PLATE, PLATE, SHEET, SHEET, tint);
             if (node.entry.hasMeta(ResearchEntryMeta.SPIKY)) {
-                graphics.blit(RenderPipelines.GUI_TEXTURED, FRAME, drawX - 2, drawY - 2, PLATE_SPECIAL_U, PLATE_V, PLATE, PLATE, SHEET, SHEET, tint);
+                blit(graphics, FRAME, drawX - 2, drawY - 2, PLATE_SPECIAL_U, PLATE_V, PLATE, PLATE, SHEET, SHEET, tint);
             }
 
-            if (knowledge.hasResearchFlag(node.id, ResearchFlag.RESEARCH) || knowledge.hasResearchFlag(node.id, ResearchFlag.PAGE)) {
+            if (knowledge.hasFlag(node.id, ResearchFlag.RESEARCH) || knowledge.hasFlag(node.id, ResearchFlag.PAGE)) {
                 drawSparkle(graphics, drawX - 5, drawY - 5);
             }
 
@@ -725,17 +742,17 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return 0xFF000000 | channel << 16 | channel << 8 | channel;
     }
 
-    private void drawForbidden(GuiGraphicsExtractor graphics, int centreX, int centreY) {
+    private void drawForbidden(GuiGraphics graphics, int centreX, int centreY) {
         // Counted backwards so the wisps curl inward.
         int frame = FORBIDDEN_FRAMES - 1 - (int) (System.currentTimeMillis() / FORBIDDEN_FRAME_MS % FORBIDDEN_FRAMES);
-        graphics.blit(RenderPipelines.GUI_TEXTURED, FORBIDDEN, centreX - FORBIDDEN_SIZE / 2, centreY - FORBIDDEN_SIZE / 2, (float) (frame * FORBIDDEN_CELL), 0.0F, FORBIDDEN_SIZE, FORBIDDEN_SIZE,
+        blit(graphics, FORBIDDEN, centreX - FORBIDDEN_SIZE / 2, centreY - FORBIDDEN_SIZE / 2, (float) (frame * FORBIDDEN_CELL), 0.0F, FORBIDDEN_SIZE, FORBIDDEN_SIZE,
                 FORBIDDEN_CELL, FORBIDDEN_CELL, FORBIDDEN_FRAMES * FORBIDDEN_CELL, FORBIDDEN_CELL, FORBIDDEN_TINT);
     }
 
     /** The new-research sparkle, cycling through its sixteen frames. */
-    private static void drawSparkle(GuiGraphicsExtractor graphics, int x, int y) {
+    private static void drawSparkle(GuiGraphics graphics, int x, int y) {
         int frame = (int) (System.currentTimeMillis() / SPARKLE_FRAME_MS % SPARKLE_FRAMES);
-        graphics.blit(RenderPipelines.GUI_TEXTURED, SPARKLE, x, y, (float) (frame * ICON), 0.0F, ICON, ICON, SPARKLE_FRAMES * ICON, ICON);
+        blit(graphics, SPARKLE, x, y, (float) (frame * ICON), 0.0F, ICON, ICON, SPARKLE_FRAMES * ICON, ICON);
     }
 
     /**
@@ -743,8 +760,8 @@ public final class ClassicThaumonomiconScreen extends Screen {
      * Items can't be tinted, so one still out of reach gets a dark overlay. Focus icons go through
      * Thaumaturge's own renderer.
      */
-    private void drawIcon(GuiGraphicsExtractor graphics, Object icon, int x, int y, float brightness, boolean locked) {
-        if (icon instanceof Identifier texture) {
+    private void drawIcon(GuiGraphics graphics, Object icon, int x, int y, float brightness, boolean locked) {
+        if (icon instanceof ResourceLocation texture) {
             drawTextureIcon(graphics, texture, x, y, grey(brightness));
             return;
         }
@@ -752,9 +769,10 @@ public final class ClassicThaumonomiconScreen extends Screen {
             if (stack.isEmpty()) {
                 return;
             }
-            graphics.item(stack, x, y);
+            graphics.renderItem(stack, x, y);
             if (locked) {
-                graphics.fill(x, y, x + ICON, y + ICON, LOCKED_ITEM_SHADE);
+                // The overlay render type skips the depth test. The item sits at z 150 and would hide a plain fill.
+                graphics.fill(RenderType.guiOverlay(), x, y, x + ICON, y + ICON, LOCKED_ITEM_SHADE);
             }
             return;
         }
@@ -762,26 +780,32 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     /** A texture icon, stepping through its frames when it is a strip of them. */
-    private void drawTextureIcon(GuiGraphicsExtractor graphics, Identifier texture, int x, int y, int tint) {
-        int w;
-        int h;
-        try {
-            AbstractTexture loaded = minecraft.getTextureManager().getTexture(texture);
-            w = loaded.getTexture().getWidth(0);
-            h = loaded.getTexture().getHeight(0);
-        } catch (IllegalStateException notYetUploaded) {
-            graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, 0.0F, 0.0F, ICON, ICON, ICON, ICON, ICON, ICON, tint);
+    private void drawTextureIcon(GuiGraphics graphics, ResourceLocation texture, int x, int y, int tint) {
+        Optional<PngInfo> size = iconSizes.computeIfAbsent(texture, this::readSize);
+        if (size.isEmpty()) {
+            blit(graphics, texture, x, y, 0.0F, 0.0F, ICON, ICON, ICON, ICON, ICON, ICON, tint);
             return;
         }
+        int w = size.get().width();
+        int h = size.get().height();
         long frameTime = System.currentTimeMillis() / 150L;
         if (h > w && h % w == 0) {
             int frame = (int) (frameTime % (h / w));
-            graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, 0.0F, (float) (frame * w), ICON, ICON, w, w, w, h, tint);
+            blit(graphics, texture, x, y, 0.0F, (float) (frame * w), ICON, ICON, w, w, w, h, tint);
         } else if (w > h && w % h == 0) {
             int frame = (int) (frameTime % (w / h));
-            graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, (float) (frame * h), 0.0F, ICON, ICON, h, h, w, h, tint);
+            blit(graphics, texture, x, y, (float) (frame * h), 0.0F, ICON, ICON, h, h, w, h, tint);
         } else {
-            graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, 0.0F, 0.0F, ICON, ICON, w, h, w, h, tint);
+            blit(graphics, texture, x, y, 0.0F, 0.0F, ICON, ICON, w, h, w, h, tint);
+        }
+    }
+
+    /** A texture's size, from its PNG header. A loaded texture in 1.21.1 doesn't keep it. */
+    private Optional<PngInfo> readSize(ResourceLocation texture) {
+        try (InputStream stream = minecraft.getResourceManager().open(texture)) {
+            return Optional.of(PngInfo.fromStream(stream));
+        } catch (IOException missing) {
+            return Optional.empty();
         }
     }
 
@@ -790,7 +814,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
      * sticks out further and is lit, the others are shaded. Tabs on the right are the left ones
      * mirrored.
      */
-    private void drawTabs(GuiGraphicsExtractor graphics, IPlayerKnowledge knowledge) {
+    private void drawTabs(GuiGraphics graphics, PlayerResearch knowledge) {
         for (int index = 0; index < tabCategories.size(); index++) {
             Tab tab = tabAt(index);
             if (tab == null) {
@@ -799,7 +823,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
             boolean selected = tab.category.equals(activeCategory);
             drawTabBody(graphics, tab.x, tab.y, selected, tab.mirrored);
             int iconX = tab.x + (tab.mirrored ? (selected ? 5 : 3) : (selected ? 3 : 5));
-            graphics.blit(RenderPipelines.GUI_TEXTURED, tab.category.value().icon(), iconX, tab.y + 4, 0.0F, 0.0F, ICON, ICON, ICON, ICON, ICON, ICON);
+            blit(graphics, tab.category.value().icon(), iconX, tab.y + 4, 0.0F, 0.0F, ICON, ICON, ICON, ICON, ICON, ICON);
             if (!selected) {
                 drawTabSprite(graphics, tab.x, tab.y, TAB_SHADE_U, tab.mirrored);
             }
@@ -811,34 +835,77 @@ public final class ClassicThaumonomiconScreen extends Screen {
         int x = searchTabX();
         int y = searchTabY();
         drawTabBody(graphics, x, y, searching, false);
-        graphics.blit(RenderPipelines.GUI_TEXTURED, TTScreenTextures.RESEARCH_BROWSER, x + (searching ? 3 : 5), y + 4, (float) SEARCH_ICON_U, (float) SEARCH_ICON_V, ICON, ICON, TTScreenTextures.TEX_SIZE,
+        blit(graphics, TTScreenTextures.RESEARCH_BROWSER, x + (searching ? 3 : 5), y + 4, (float) SEARCH_ICON_U, (float) SEARCH_ICON_V, ICON, ICON, TTScreenTextures.TEX_SIZE,
                 TTScreenTextures.TEX_SIZE);
         if (!searching) {
             drawTabSprite(graphics, x, y, TAB_SHADE_U, false);
         }
     }
 
-    private static void drawTabBody(GuiGraphicsExtractor graphics, int x, int y, boolean selected, boolean mirrored) {
+    private static void drawTabBody(GuiGraphics graphics, int x, int y, boolean selected, boolean mirrored) {
         drawTabSprite(graphics, x, y, selected ? TAB_SELECTED_U : TAB_UNSELECTED_U, mirrored);
     }
 
-    private static void drawTabSprite(GuiGraphicsExtractor graphics, int x, int y, int u, boolean mirrored) {
+    private static void drawTabSprite(GuiGraphics graphics, int x, int y, int u, boolean mirrored) {
         if (mirrored) {
             // A negative source width flips the sprite.
-            graphics.blit(RenderPipelines.GUI_TEXTURED, FRAME, x, y, (float) (u + TAB), (float) TAB_V, TAB, TAB, -TAB, TAB, SHEET, SHEET);
+            blit(graphics, FRAME, x, y, (float) (u + TAB), (float) TAB_V, TAB, TAB, -TAB, TAB, SHEET, SHEET);
         } else {
-            graphics.blit(RenderPipelines.GUI_TEXTURED, FRAME, x, y, (float) u, (float) TAB_V, TAB, TAB, SHEET, SHEET);
+            blit(graphics, FRAME, x, y, (float) u, (float) TAB_V, TAB, TAB, SHEET, SHEET);
         }
+    }
+
+    private static void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, float u, float v, int width, int height, int textureWidth, int textureHeight) {
+        blit(graphics, texture, x, y, u, v, width, height, width, height, textureWidth, textureHeight, WHITE);
+    }
+
+    private static void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, float u, float v, int width, int height, int textureWidth, int textureHeight, int colour) {
+        blit(graphics, texture, x, y, u, v, width, height, width, height, textureWidth, textureHeight, colour);
+    }
+
+    private static void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, float u, float v, int width, int height, int regionWidth, int regionHeight, int textureWidth,
+            int textureHeight) {
+        blit(graphics, texture, x, y, u, v, width, height, regionWidth, regionHeight, textureWidth, textureHeight, WHITE);
+    }
+
+    /**
+     * Draws a region of a texture at {@code width} by {@code height}, tinted by {@code colour}. A
+     * negative region width flips it. GuiGraphics' own blit in 1.21.1 can't tint and doesn't blend,
+     * and the frame's inner shadow and the warp haze need both.
+     *
+     * <p>The depth test is off, so each texture lands over everything drawn before it. Items sit at
+     * z 150, and with the test on an item at the edge of the window would show over the frame.
+     */
+    private static void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, float u, float v, int width, int height, int regionWidth, int regionHeight, int textureWidth,
+            int textureHeight, int colour) {
+        float u0 = u / textureWidth;
+        float u1 = (u + regionWidth) / textureWidth;
+        float v0 = v / textureHeight;
+        float v1 = (v + regionHeight) / textureHeight;
+        Matrix4f pose = graphics.pose().last().pose();
+        RenderSystem.setShaderTexture(0, texture);
+        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableDepthTest();
+        BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+        buffer.addVertex(pose, x, y, 0.0F).setUv(u0, v0).setColor(colour);
+        buffer.addVertex(pose, x, y + height, 0.0F).setUv(u0, v1).setColor(colour);
+        buffer.addVertex(pose, x + width, y + height, 0.0F).setUv(u1, v1).setColor(colour);
+        buffer.addVertex(pose, x + width, y, 0.0F).setUv(u1, v0).setColor(colour);
+        BufferUploader.drawWithShader(buffer.buildOrThrow());
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableBlend();
     }
 
     // Tooltips
 
-    private void drawEntryTooltip(GuiGraphicsExtractor graphics, IPlayerKnowledge knowledge, EntryNode node, int mouseX, int mouseY) {
-        boolean complete = knowledge.isResearchComplete(node.id);
+    private void drawEntryTooltip(GuiGraphics graphics, PlayerResearch knowledge, EntryNode node, int mouseX, int mouseY) {
+        boolean complete = knowledge.hasCompleted(node.id);
         boolean unlockable = canUnlock(knowledge, node);
         boolean special = node.entry.hasMeta(ResearchEntryMeta.SPIKY);
         MutableComponent name = Component.translatable(node.entry.nameKey());
-        if (!unlockable && !knowledge.isResearchKnown(node.id)) {
+        if (!unlockable && !knowledge.knows(node.id)) {
             name = name.withStyle(style -> style.withFont(ARCANE_FONT));
         }
         int nameColour = unlockable ? (special ? NAME_SPECIAL : NAME) : (special ? NAME_LOCKED_SPECIAL : NAME_LOCKED);
@@ -846,7 +913,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         List<Line> lines = new ArrayList<>();
         if (unlockable) {
             if (!complete && !node.entry.stages().isEmpty()) {
-                int stage = knowledge.researchStage(node.id);
+                int stage = knowledge.stageOf(node.id);
                 if (stage >= 0) {
                     lines.add(new Line(Component.translatable("tooltip.thaumaturge.research.stage").append(" " + (stage + 1) + "/" + node.entry.stages().size()), STAGE));
                 } else {
@@ -872,10 +939,10 @@ public final class ClassicThaumonomiconScreen extends Screen {
                 lines.add(new Line(Component.literal(" - ").append(message), MISSING_PARENT));
             }
         }
-        if (knowledge.hasResearchFlag(node.id, ResearchFlag.RESEARCH)) {
+        if (knowledge.hasFlag(node.id, ResearchFlag.RESEARCH)) {
             lines.add(new Line(Component.translatable("tooltip.thaumaturge.research.new_research"), NAME));
         }
-        if (knowledge.hasResearchFlag(node.id, ResearchFlag.PAGE)) {
+        if (knowledge.hasFlag(node.id, ResearchFlag.PAGE)) {
             lines.add(new Line(Component.translatable("tooltip.thaumaturge.research.new_page"), NAME));
         }
         if (minecraft.options.advancedItemTooltips) {
@@ -884,15 +951,15 @@ public final class ClassicThaumonomiconScreen extends Screen {
         drawTooltip(graphics, name, nameColour, lines, mouseX, mouseY);
     }
 
-    private void drawTabTooltip(GuiGraphicsExtractor graphics, IPlayerKnowledge knowledge, Holder.Reference<IResearchCategory> category, int mouseX, int mouseY) {
+    private void drawTabTooltip(GuiGraphics graphics, PlayerResearch knowledge, Holder.Reference<IResearchCategory> category, int mouseX, int mouseY) {
         List<Line> lines = new ArrayList<>();
         lines.add(new Line(Component.literal(categoryCompletion(knowledge, category) + "%"), SEARCH_OVERFLOW));
         boolean newResearch = false;
         boolean newPage = false;
         for (EntryNode node : nodesByCategory.getOrDefault(category, List.of())) {
-            if (knowledge.isResearchKnown(node.id)) {
-                newResearch |= knowledge.hasResearchFlag(node.id, ResearchFlag.RESEARCH);
-                newPage |= knowledge.hasResearchFlag(node.id, ResearchFlag.PAGE);
+            if (knowledge.knows(node.id)) {
+                newResearch |= knowledge.hasFlag(node.id, ResearchFlag.RESEARCH);
+                newPage |= knowledge.hasFlag(node.id, ResearchFlag.PAGE);
             }
         }
         if (newResearch) {
@@ -909,7 +976,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
      * and every other line at half size below it. Half-size lines are measured at half width, so a
      * long sentence under a short name doesn't widen the box to its full-size width.
      */
-    private void drawTooltip(GuiGraphicsExtractor graphics, Component title, int titleColour, List<Line> lines, int mouseX, int mouseY) {
+    private void drawTooltip(GuiGraphics graphics, Component title, int titleColour, List<Line> lines, int mouseX, int mouseY) {
         int boxWidth = font.width(title);
         for (Line line : lines) {
             boxWidth = Math.max(boxWidth, (font.width(line.text) + 1) / 2);
@@ -924,19 +991,22 @@ public final class ClassicThaumonomiconScreen extends Screen {
         if (y + boxHeight + 3 > height) {
             y = Math.max(3, height - 3 - boxHeight);
         }
+        graphics.pose().pushPose();
+        graphics.pose().translate(0.0F, 0.0F, TOOLTIP_Z);
         graphics.fill(x - 3, y - 3, x + boxWidth + 3, y + boxHeight + 3, TOOLTIP_BACKGROUND);
-        graphics.text(font, title, x, y, titleColour, true);
+        graphics.drawString(font, title, x, y, titleColour, true);
         for (int i = 0; i < lines.size(); i++) {
-            graphics.pose().pushMatrix();
-            graphics.pose().translate(x, y + TOOLTIP_HEAD + i * TOOLTIP_LINE);
-            graphics.pose().scale(0.5F, 0.5F);
-            graphics.text(font, lines.get(i).text, 0, 0, lines.get(i).colour, true);
-            graphics.pose().popMatrix();
+            graphics.pose().pushPose();
+            graphics.pose().translate(x, y + TOOLTIP_HEAD + i * TOOLTIP_LINE, 0.0F);
+            graphics.pose().scale(0.5F, 0.5F, 1.0F);
+            graphics.drawString(font, lines.get(i).text, 0, 0, lines.get(i).colour, true);
+            graphics.pose().popPose();
         }
+        graphics.pose().popPose();
     }
 
     private static Component categoryName(Holder.Reference<IResearchCategory> ref) {
-        Identifier id = ref.key().identifier();
+        ResourceLocation id = ref.key().location();
         return Component.translatable("research_category." + id.getNamespace() + "." + id.getPath());
     }
 
@@ -965,7 +1035,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         if (query == null || query.isEmpty() || minecraft.player == null) {
             return;
         }
-        IPlayerKnowledge knowledge = knowledge();
+        PlayerResearch knowledge = knowledge();
         String needle = query.toLowerCase(Locale.ROOT);
         for (Holder.Reference<IResearchCategory> ref : allCategories) {
             if (!isCategoryUnlocked(knowledge, ref)) {
@@ -976,7 +1046,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
                 searchResults.add(new SearchResult(name, SearchResult.Kind.CATEGORY, null, ref));
             }
         }
-        for (Identifier known : knowledge.researchList()) {
+        for (ResourceLocation known : knowledge.knownEntries()) {
             EntryNode node = nodesById.get(known);
             if (node == null) {
                 continue;
@@ -986,7 +1056,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
                 searchResults.add(new SearchResult(entryName, SearchResult.Kind.ENTRY, node, null));
             }
             int stageCount = node.entry.stages().size();
-            int stageIndex = Math.min(stageCount - 1, knowledge.researchStage(known) + 2);
+            int stageIndex = Math.min(stageCount - 1, knowledge.stageOf(known) + 2);
             if (stageIndex < 0 || stageIndex >= stageCount) {
                 continue;
             }
@@ -1009,18 +1079,18 @@ public final class ClassicThaumonomiconScreen extends Screen {
         return (MAP_HEIGHT - SEARCH_FIRST_ROW) / SEARCH_ROW - 1;
     }
 
-    private void drawSearchResults(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+    private void drawSearchResults(GuiGraphics graphics, int mouseX, int mouseY) {
         int rows = searchRowsShown();
         for (int i = 0; i < searchResults.size() && i < rows; i++) {
             SearchResult result = searchResults.get(i);
             int rowY = mapTop() + SEARCH_FIRST_ROW + i * SEARCH_ROW;
             boolean hover = searchRowHit(mouseX, mouseY, i);
             int iconX = mapLeft() + SEARCH_ICON_X;
-            graphics.pose().pushMatrix();
-            graphics.pose().translate(iconX, rowY);
-            graphics.pose().scale(0.5F, 0.5F);
+            graphics.pose().pushPose();
+            graphics.pose().translate(iconX, rowY, 0.0F);
+            graphics.pose().scale(0.5F, 0.5F, 1.0F);
             switch (result.kind) {
-                case RECIPE -> graphics.blit(RenderPipelines.GUI_TEXTURED, TTScreenTextures.RESEARCH_BROWSER, 0, 0, (float) SEARCH_RECIPE_U, (float) SEARCH_RECIPE_V, ICON, ICON, TTScreenTextures.TEX_SIZE,
+                case RECIPE -> blit(graphics, TTScreenTextures.RESEARCH_BROWSER, 0, 0, (float) SEARCH_RECIPE_U, (float) SEARCH_RECIPE_V, ICON, ICON, TTScreenTextures.TEX_SIZE,
                         TTScreenTextures.TEX_SIZE);
                 case ENTRY -> {
                     if (result.node != null) {
@@ -1029,15 +1099,15 @@ public final class ClassicThaumonomiconScreen extends Screen {
                 }
                 case CATEGORY -> {
                     if (result.category != null) {
-                        graphics.blit(RenderPipelines.GUI_TEXTURED, result.category.value().icon(), 0, 0, 0.0F, 0.0F, ICON, ICON, ICON, ICON, ICON, ICON);
+                        blit(graphics, result.category.value().icon(), 0, 0, 0.0F, 0.0F, ICON, ICON, ICON, ICON, ICON, ICON);
                     }
                 }
             }
-            graphics.pose().popMatrix();
-            graphics.text(font, result.name, mapLeft() + SEARCH_TEXT_X, rowY, result.colour(hover), false);
+            graphics.pose().popPose();
+            graphics.drawString(font, result.name, mapLeft() + SEARCH_TEXT_X, rowY, result.colour(hover), false);
         }
         if (searchResults.size() > rows) {
-            graphics.text(font, Component.translatable("gui.thaumaturge.thaumonomicon.search_more"), mapLeft() + SEARCH_ICON_X, mapTop() + SEARCH_FIRST_ROW + rows * SEARCH_ROW + 2, SEARCH_OVERFLOW, false);
+            graphics.drawString(font, Component.translatable("gui.thaumaturge.thaumonomicon.search_more"), mapLeft() + SEARCH_ICON_X, mapTop() + SEARCH_FIRST_ROW + rows * SEARCH_ROW + 2, SEARCH_OVERFLOW, false);
         }
     }
 
@@ -1059,13 +1129,11 @@ public final class ClassicThaumonomiconScreen extends Screen {
     // Input
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT || minecraft.player == null) {
-            return super.mouseClicked(event, doubleClick);
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT || minecraft.player == null) {
+            return super.mouseClicked(mouseX, mouseY, button);
         }
-        double mouseX = event.x();
-        double mouseY = event.y();
-        IPlayerKnowledge knowledge = knowledge();
+        PlayerResearch knowledge = knowledge();
         if (overSearchTab(mouseX, mouseY)) {
             playSound(TTSounds.CLACK.get(), CLACK_VOLUME);
             setSearching(!searching);
@@ -1094,21 +1162,21 @@ public final class ClassicThaumonomiconScreen extends Screen {
                 }
                 return true;
             }
-            return super.mouseClicked(event, doubleClick);
+            return super.mouseClicked(mouseX, mouseY, button);
         }
         EntryNode node = entryAt(knowledge, mouseX, mouseY);
         if (node != null) {
-            if (knowledge.isResearchKnown(node.id)) {
-                knowledge.clearResearchFlag(node.id, ResearchFlag.RESEARCH);
-                knowledge.clearResearchFlag(node.id, ResearchFlag.PAGE);
-                ClientPacketDistributor.sendToServer(new ServerboundClearResearchFlagsPayload(node.id, List.of(ResearchFlag.RESEARCH, ResearchFlag.PAGE)));
-                int stage = knowledge.researchStage(node.id);
+            if (knowledge.knows(node.id)) {
+                knowledge.removeFlag(node.id, ResearchFlag.RESEARCH);
+                knowledge.removeFlag(node.id, ResearchFlag.PAGE);
+                PacketDistributor.sendToServer(new ServerboundClearResearchFlagsPayload(node.id, List.of(ResearchFlag.RESEARCH, ResearchFlag.PAGE)));
+                int stage = knowledge.stageOf(node.id);
                 if (stage > 0 && stage >= node.entry.stages().size() - 1) {
-                    ClientPacketDistributor.sendToServer(new ServerboundUnlockResearchPayload(node.id));
+                    PacketDistributor.sendToServer(new ServerboundUnlockResearchPayload(node.id));
                 }
                 openEntry(node);
             } else if (canUnlock(knowledge, node)) {
-                ClientPacketDistributor.sendToServer(new ServerboundUnlockResearchPayload(node.id));
+                PacketDistributor.sendToServer(new ServerboundUnlockResearchPayload(node.id));
                 openEntry(node);
             }
             return true;
@@ -1117,11 +1185,11 @@ public final class ClassicThaumonomiconScreen extends Screen {
             dragging = true;
             return true;
         }
-        return super.mouseClicked(event, doubleClick);
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     /** The entry under a point of the window. Where plates overlap, the one drawn last (on top). */
-    private @Nullable EntryNode entryAt(IPlayerKnowledge knowledge, double mouseX, double mouseY) {
+    private @Nullable EntryNode entryAt(PlayerResearch knowledge, double mouseX, double mouseY) {
         if (!inMap(mouseX, mouseY)) {
             return null;
         }
@@ -1147,13 +1215,13 @@ public final class ClassicThaumonomiconScreen extends Screen {
      * For the visual check: centres the map on the first visible entry of the open category in the
      * given state and returns that entry's centre on screen, or null when there is none.
      */
-    int @Nullable [] focus(Probe wanted) {
-        IPlayerKnowledge knowledge = knowledge();
+    @Nullable int[] focus(Probe wanted) {
+        PlayerResearch knowledge = knowledge();
         for (EntryNode node : activeNodes()) {
             if (!isVisible(knowledge, node)) {
                 continue;
             }
-            boolean complete = knowledge.isResearchComplete(node.id);
+            boolean complete = knowledge.hasCompleted(node.id);
             boolean unlockable = canUnlock(knowledge, node);
             boolean match = switch (wanted) {
                 case LOCKED -> !unlockable;
@@ -1178,22 +1246,22 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dx, double dy) {
         if (dragging) {
             mapX -= dx;
             mapY -= dy;
             clampMap();
             return true;
         }
-        return super.mouseDragged(event, dx, dy);
+        return super.mouseDragged(mouseX, mouseY, button, dx, dy);
     }
 
     @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             dragging = false;
         }
-        return super.mouseReleased(event);
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
@@ -1206,19 +1274,19 @@ public final class ClassicThaumonomiconScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyEvent event) {
-        if (searching && searchField != null && searchField.keyPressed(event)) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (searching && searchField != null && searchField.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
-        if (searching && event.key() == GLFW.GLFW_KEY_ESCAPE) {
+        if (searching && keyCode == GLFW.GLFW_KEY_ESCAPE) {
             setSearching(false);
             return true;
         }
-        if (minecraft.options.keyInventory.matches(event) && !(searching && searchField != null && searchField.isFocused())) {
+        if (minecraft.options.keyInventory.matches(keyCode, scanCode) && !(searching && searchField != null && searchField.isFocused())) {
             onClose();
             return true;
         }
-        return super.keyPressed(event);
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private void playSound(SoundEvent sound, float volume) {
@@ -1229,7 +1297,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
     // Records
 
-    private record EntryNode(Identifier id, IResearchEntry entry, Holder<IResearchEntry> holder, Holder.Reference<IResearchCategory> category) {
+    private record EntryNode(ResourceLocation id, IResearchEntry entry, Holder<IResearchEntry> holder, Holder.Reference<IResearchCategory> category) {
     }
 
     private record Tab(Holder.Reference<IResearchCategory> category, int x, int y, boolean mirrored) {
@@ -1244,7 +1312,7 @@ public final class ClassicThaumonomiconScreen extends Screen {
         }
     }
 
-    private record SearchResult(String name, Kind kind, @Nullable EntryNode node, Holder.@Nullable Reference<IResearchCategory> category) {
+    private record SearchResult(String name, Kind kind, @Nullable EntryNode node, @Nullable Holder.Reference<IResearchCategory> category) {
         enum Kind {
             CATEGORY, ENTRY, RECIPE
         }

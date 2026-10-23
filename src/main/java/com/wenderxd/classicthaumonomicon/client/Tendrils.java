@@ -1,17 +1,11 @@
 package com.wenderxd.classicthaumonomicon.client;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import java.util.Arrays;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.navigation.ScreenRectangle;
-import net.minecraft.client.gui.render.TextureSetup;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.client.renderer.state.gui.GuiElementRenderState;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.util.Mth;
-import org.joml.Matrix3x2f;
-import org.joml.Matrix3x2fc;
-import org.jspecify.annotations.Nullable;
+import org.joml.Matrix4f;
 
 /**
  * The curved lines between research entries, built the way Thaumcraft 4's map builds them.
@@ -24,9 +18,8 @@ import org.jspecify.annotations.Nullable;
  * <p>An unfinished link also waves (most at the child, not at all at the parent), fades in along
  * its length and darkens toward its end. A finished link is plain and still.
  *
- * <p>Every tendril on the map goes into one strip of quads, submitted as a single GUI element.
- * As separate rectangles they would be thousands of tiny overlapping elements a frame, and the GUI
- * puts each element that overlaps another on a layer of its own.
+ * <p>Every tendril on the map is collected into one batch of quads and drawn in a single call.
+ * As separate rectangles they would be thousands of tiny fills a frame.
  */
 final class Tendrils {
     /**
@@ -42,10 +35,6 @@ final class Tendrils {
     private float[] ys = new float[1024];
     private int[] colours = new int[1024];
     private int vertices;
-    private float minX = Float.MAX_VALUE;
-    private float minY = Float.MAX_VALUE;
-    private float maxX = -Float.MAX_VALUE;
-    private float maxY = -Float.MAX_VALUE;
 
     // Scratch for one tendril's points.
     private float[] px = new float[64];
@@ -91,25 +80,18 @@ final class Tendrils {
         ribbon(steps + 1);
     }
 
-    /** Submits everything added so far to the GUI as one element and starts over. */
-    void submit(GuiGraphicsExtractor graphics) {
+    /** Draws everything added so far as plain coloured GUI quads and starts over. */
+    void submit(GuiGraphics graphics) {
         if (vertices == 0) {
             return;
         }
-        Matrix3x2f pose = new Matrix3x2f(graphics.pose());
-        ScreenRectangle scissor = graphics.peekScissorStack();
-        int left = Mth.floor(minX);
-        int top = Mth.floor(minY);
-        ScreenRectangle bounds = new ScreenRectangle(left, top, Mth.ceil(maxX) - left + 1, Mth.ceil(maxY) - top + 1).transformMaxBounds(pose);
-        if (scissor != null) {
-            bounds = scissor.intersection(bounds);
+        Matrix4f pose = graphics.pose().last().pose();
+        VertexConsumer consumer = graphics.bufferSource().getBuffer(RenderType.gui());
+        for (int i = 0; i < vertices; i++) {
+            consumer.addVertex(pose, xs[i], ys[i], 0.0F).setColor(colours[i]);
         }
-        if (bounds != null) {
-            graphics.submitGuiElementRenderState(new Ribbon(Arrays.copyOf(xs, vertices), Arrays.copyOf(ys, vertices), Arrays.copyOf(colours, vertices), pose, scissor, bounds));
-        }
+        graphics.flush();
         vertices = 0;
-        minX = minY = Float.MAX_VALUE;
-        maxX = maxY = -Float.MAX_VALUE;
     }
 
     /**
@@ -147,10 +129,6 @@ final class Tendrils {
         ys[vertices] = y;
         colours[vertices] = colour;
         vertices++;
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
     }
 
     private void ensurePoints(int count) {
@@ -180,25 +158,5 @@ final class Tendrils {
         int g = (int) ((rgb >> 8 & 0xFF) * factor);
         int b = (int) ((rgb & 0xFF) * factor);
         return r << 16 | g << 8 | b;
-    }
-
-    /** Every tendril's quads, as one coloured, untextured GUI element. */
-    private record Ribbon(float[] xs, float[] ys, int[] colours, Matrix3x2fc pose, @Nullable ScreenRectangle scissorArea, ScreenRectangle bounds) implements GuiElementRenderState {
-        @Override
-        public void buildVertices(VertexConsumer consumer) {
-            for (int i = 0; i < xs.length; i++) {
-                consumer.addVertexWith2DPose(pose, xs[i], ys[i]).setColor(colours[i]);
-            }
-        }
-
-        @Override
-        public RenderPipeline pipeline() {
-            return RenderPipelines.GUI;
-        }
-
-        @Override
-        public TextureSetup textureSetup() {
-            return TextureSetup.noTexture();
-        }
     }
 }

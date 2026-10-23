@@ -1,6 +1,6 @@
 # Classic Thaumonomicon
 
-A client-side addon for [Thaumaturge](https://github.com/Leclowndu93150/Thaumaturge) (Minecraft 26.1.2, NeoForge). It makes the Thaumonomicon's research map look like it did in Thaumcraft 4:
+A client-side addon for [Thaumaturge](https://github.com/Leclowndu93150/Thaumaturge) (Minecraft 1.21.1, NeoForge). It makes the Thaumonomicon's research map look like it did in Thaumcraft 4:
 
 - a book-sized pane with a carved wooden frame, instead of a brass frame around the whole screen
 - a violet nebula behind the tree that scrolls slower than the tree when you drag
@@ -12,6 +12,8 @@ A client-side addon for [Thaumaturge](https://github.com/Leclowndu93150/Thaumatu
 
 Only the look changes. Visibility, unlocking, clicks and packets follow Thaumaturge's rules, and an entry's pages are still Thaumaturge's book screen.
 
+This is the 1.21.1 branch. The `main` branch has the 26.1.2 version.
+
 ## Settings
 
 In game: Mods > Classic Thaumonomicon > Config. Or edit `config/classic_thaumonomicon-client.toml`.
@@ -21,15 +23,25 @@ In game: Mods > Classic Thaumonomicon > Config. Or edit `config/classic_thaumono
 
 ## Building
 
-Java 25 (Gradle downloads it if needed):
+Thaumaturge's 1.21.1 branch has no published build yet, so the addon compiles against a local one. Build it once and copy the jar into `libs/`:
+
+```sh
+git clone -b 1.21.1 https://github.com/Leclowndu93150/Thaumaturge.git
+cd Thaumaturge
+# Its build plugin (dev.prism) needs Gradle to run on Java 25.
+./gradlew runData
+./gradlew jar
+```
+
+Run `runData` on its own first. Thaumaturge doesn't commit its generated resources, so a plain `jar` leaves out its recipes, tags and language files. Then copy `build/libs/thaumaturge-1.21.1-NeoForge-1.0.6.jar` into this project's `libs/` folder. For another Thaumaturge version, change `thaumaturge_version` in `gradle.properties`. `libs/` is git-ignored, since Thaumaturge is All Rights Reserved and its jar must not be committed.
+
+Then, with Java 21 (Gradle downloads it if needed):
 
 ```powershell
-.\gradlew.bat build              # build/libs/classic-thaumonomicon-<version>.jar
+.\gradlew.bat build              # build/libs/classic-thaumonomicon-1.21.1-<version>.jar
 .\gradlew.bat runClient          # dev client with Thaumaturge, Curios and Lithostitched
 .\gradlew.bat runBookVisualCheck # screenshots the book into runs/book-check/screenshots, then quits
 ```
-
-Thaumaturge is compiled against and run from its CurseForge release (`curse.maven:thaumaturge-1628024`). To update it, change `thaumaturge_curse_file` in `gradle.properties`.
 
 ## Credits
 

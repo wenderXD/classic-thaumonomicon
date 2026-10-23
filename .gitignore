@@ -2,6 +2,9 @@
 .gradle/
 build/
 
+# local Thaumaturge build, All Rights Reserved so never committed
+libs/
+
 # dev runs and visual-check screenshots
 run/
 runs/
