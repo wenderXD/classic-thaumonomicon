@@ -19,6 +19,7 @@ import com.leclowndu93150.thaumaturge.network.ServerboundUnlockResearchPayload;
 import com.leclowndu93150.thaumaturge.registry.TTSounds;
 import com.wenderxd.classicthaumonomicon.ClassicConfig;
 import com.wenderxd.classicthaumonomicon.ClassicThaumonomicon;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -837,9 +838,9 @@ public final class ClassicThaumonomiconScreen extends Screen {
         boolean complete = knowledge.isResearchComplete(node.id);
         boolean unlockable = canUnlock(knowledge, node);
         boolean special = node.entry.hasMeta(ResearchEntryMeta.SPIKY);
-        MutableComponent name = Component.translatable(node.entry.nameKey());
+        Component name = Component.translatable(node.entry.nameKey());
         if (!unlockable && !knowledge.isResearchKnown(node.id)) {
-            name = name.withStyle(style -> style.withFont(ARCANE_FONT));
+            name = arcaneName(name.getString());
         }
         int nameColour = unlockable ? (special ? NAME_SPECIAL : NAME) : (special ? NAME_LOCKED_SPECIAL : NAME_LOCKED);
 
@@ -933,6 +934,52 @@ public final class ClassicThaumonomiconScreen extends Screen {
             graphics.text(font, lines.get(i).text, 0, 0, lines.get(i).colour, true);
             graphics.pose().popMatrix();
         }
+    }
+
+    /**
+     * The name in the enchanting table's script. Vanilla's alt font only has A to Z, and any other
+     * character draws as a missing-glyph box, so other letters are swapped for one it has (accented
+     * letters lose the accent, other alphabets are mapped by code point) and anything that isn't a
+     * letter stays in the normal font.
+     */
+    private static Component arcaneName(String name) {
+        MutableComponent result = Component.empty();
+        StringBuilder run = new StringBuilder();
+        boolean runIsScript = false;
+        int i = 0;
+        while (i < name.length()) {
+            int c = name.codePointAt(i);
+            i += Character.charCount(c);
+            boolean script = Character.isLetter(c);
+            if (script != runIsScript) {
+                appendRun(result, run, runIsScript);
+                runIsScript = script;
+            }
+            run.appendCodePoint(script ? scriptLetter(c) : c);
+        }
+        appendRun(result, run, runIsScript);
+        return result;
+    }
+
+    private static void appendRun(MutableComponent result, StringBuilder run, boolean script) {
+        if (run.isEmpty()) {
+            return;
+        }
+        MutableComponent part = Component.literal(run.toString());
+        result.append(script ? part.withStyle(style -> style.withFont(ARCANE_FONT)) : part);
+        run.setLength(0);
+    }
+
+    private static int scriptLetter(int c) {
+        if (c < 128) {
+            return c;
+        }
+        int base = Normalizer.normalize(Character.toString(c), Normalizer.Form.NFD).codePointAt(0);
+        if (base < 128 && Character.isLetter(base)) {
+            return base;
+        }
+        int letter = 'a' + c % 26;
+        return Character.isUpperCase(c) ? Character.toUpperCase(letter) : letter;
     }
 
     private static Component categoryName(Holder.Reference<IResearchCategory> ref) {
