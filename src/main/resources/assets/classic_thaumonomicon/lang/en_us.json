@@ -5,5 +5,5 @@
   "classic_thaumonomicon.configuration.enabled": "Classic research map",
   "classic_thaumonomicon.configuration.enabled.tooltip": "Open the Thaumcraft 4 style research map in place of Thaumaturge's own.",
   "classic_thaumonomicon.configuration.classicBackgrounds": "One nebula for every category",
-  "classic_thaumonomicon.configuration.classicBackgrounds.tooltip": "Show every Thaumaturge category over the same violet nebula, as Thaumcraft 4 did. Eldritch and other mods' categories keep their own backgrounds."
+  "classic_thaumonomicon.configuration.classicBackgrounds.tooltip": "Show every category with one of Thaumaturge's backgrounds over the same violet nebula, as Thaumcraft 4 did. Eldritch and categories with their own art keep their backgrounds."
 }

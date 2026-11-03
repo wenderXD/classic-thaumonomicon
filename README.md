@@ -19,7 +19,7 @@ This is the 1.21.1 branch. The `main` branch has the 26.1.2 version.
 In game: Mods > Classic Thaumonomicon > Config. Or edit `config/classic_thaumonomicon-client.toml`.
 
 - `enabled` (default on): turns the classic map on or off without removing the mod.
-- `classicBackgrounds` (default on): one nebula for every Thaumaturge category, as in Thaumcraft 4. Eldritch and other mods' categories always keep their own backgrounds.
+- `classicBackgrounds` (default on): one nebula for every category with one of Thaumaturge's backgrounds, as in Thaumcraft 4. That includes other mods' categories that reuse those backgrounds, because the tendrils are hard to see on the dark ones. Eldritch and categories with their own art keep their backgrounds.
 
 ## Building
 

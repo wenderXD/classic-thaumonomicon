@@ -615,13 +615,16 @@ public final class ClassicThaumonomiconScreen extends Screen {
 
     /**
      * Thaumcraft 4 used the same violet nebula for every category except Eldritch, which had a
-     * darker one. Thaumaturge's Eldritch background is used for that. Categories from other mods
-     * keep their own.
+     * darker one. Thaumaturge's Eldritch background is used for that. Another mod's category that
+     * reuses one of Thaumaturge's backgrounds gets the nebula too, since the tendril colours are
+     * picked for it and blue tendrils can't be seen on the dark sheets. A mod's own art is kept.
      */
     private static ResourceLocation backdropFor(Holder.Reference<IResearchCategory> category) {
         ResourceLocation id = category.key().location();
-        boolean classic = ClassicConfig.CLASSIC_BACKGROUNDS.get() && id.getNamespace().equals(TTIds.MODID) && !id.getPath().equals("eldritch");
-        return classic ? NEBULA : category.value().background();
+        ResourceLocation background = category.value().background();
+        boolean eldritch = id.getNamespace().equals(TTIds.MODID) && id.getPath().equals("eldritch");
+        boolean classic = ClassicConfig.CLASSIC_BACKGROUNDS.get() && background.getNamespace().equals(TTIds.MODID) && !eldritch;
+        return classic ? NEBULA : background;
     }
 
     /**
