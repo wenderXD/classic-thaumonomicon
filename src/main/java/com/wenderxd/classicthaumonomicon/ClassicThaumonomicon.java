@@ -2,6 +2,7 @@ package com.wenderxd.classicthaumonomicon;
 
 import com.leclowndu93150.thaumaturge.client.screen.research.ThaumonomiconBrowserScreen;
 import com.wenderxd.classicthaumonomicon.client.ClassicThaumonomiconScreen;
+import com.wenderxd.classicthaumonomicon.client.EntryPages;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.ModContainer;
@@ -22,7 +23,8 @@ import net.neoforged.neoforge.common.NeoForge;
  * the last-read entry with Thaumaturge's map behind it, and the map is swapped when that entry is
  * closed.
  *
- * <p>The pages, recipes and stages past the map are still Thaumaturge's own screen.
+ * <p>The pages, recipes and stages past the map are still Thaumaturge's own screen, apart from how
+ * they go back to the map. See {@link EntryPages}.
  */
 @Mod(value = ClassicThaumonomicon.MOD_ID, dist = Dist.CLIENT)
 public final class ClassicThaumonomicon {
@@ -32,6 +34,9 @@ public final class ClassicThaumonomicon {
         container.registerConfig(ModConfig.Type.CLIENT, ClassicConfig.SPEC);
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         NeoForge.EVENT_BUS.addListener(ClassicThaumonomicon::onScreenOpening);
+        NeoForge.EVENT_BUS.addListener(EntryPages::onRenderPre);
+        NeoForge.EVENT_BUS.addListener(EntryPages::onRenderPost);
+        NeoForge.EVENT_BUS.addListener(EntryPages::onMouse);
         if (Boolean.getBoolean(MOD_ID + ".visualCheck")) {
             com.wenderxd.classicthaumonomicon.client.BookVisualCheck.register();
         }

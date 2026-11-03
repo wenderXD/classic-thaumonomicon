@@ -10,7 +10,7 @@ A client-side addon for [Thaumaturge](https://github.com/Leclowndu93150/Thaumatu
 - research you can start next pulses, and research out of reach is dim with its name in the enchanting table script
 - a dark warp haze under forbidden research, and a sparkle on new research and new pages
 
-Only the look changes. Visibility, unlocking, clicks and packets follow Thaumaturge's rules, and an entry's pages are still Thaumaturge's book screen.
+Visibility, unlocking, clicks and packets on the map follow Thaumaturge's rules, and an entry's pages are still Thaumaturge's book screen. The one change there is going back: right click works, and the return button sits at the bottom middle of the book.
 
 This is the 1.21.1 branch. The `main` branch has the 26.1.2 version.
 
@@ -18,7 +18,7 @@ This is the 1.21.1 branch. The `main` branch has the 26.1.2 version.
 
 In game: Mods > Classic Thaumonomicon > Config. Or edit `config/classic_thaumonomicon-client.toml`.
 
-- `enabled` (default on): turns the classic map on or off without removing the mod.
+- `enabled` (default on): turns the classic map and the change to going back on or off without removing the mod.
 - `classicBackgrounds` (default on): one nebula for every category with one of Thaumaturge's backgrounds, as in Thaumcraft 4. That includes other mods' categories that reuse those backgrounds, because the tendrils are hard to see on the dark ones. Eldritch and categories with their own art keep their backgrounds.
 
 ## Building
